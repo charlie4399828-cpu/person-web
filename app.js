@@ -4,6 +4,16 @@
   const defaults = window.CARD_DATA;
   if (!defaults) return;
 
+  function getCloudSync() {
+    const fromFile = window.CARD_CLOUD || {};
+    const fromData = defaults.cloudSync || {};
+    return {
+      supabaseUrl: (fromFile.supabaseUrl || fromData.supabaseUrl || "").trim(),
+      supabaseAnonKey: (fromFile.supabaseAnonKey || fromData.supabaseAnonKey || "").trim(),
+      saveFunctionUrl: (fromFile.saveFunctionUrl || fromData.saveFunctionUrl || "").trim(),
+    };
+  }
+
   const EDIT_PASSWORD = String(defaults.editPassword || "763560");
 
   let data = null;
@@ -21,7 +31,7 @@
   }
 
   async function fetchRemoteCardData() {
-    const cfg = defaults.cloudSync || {};
+    const cfg = getCloudSync();
     const url = (cfg.supabaseUrl || "").trim();
     const key = (cfg.supabaseAnonKey || "").trim();
 
@@ -94,7 +104,7 @@
   }
 
   async function syncToCloud() {
-    const cfg = defaults.cloudSync || {};
+    const cfg = getCloudSync();
     const saveUrl = (cfg.saveFunctionUrl || "").trim();
     if (!saveUrl) {
       return { ok: false, reason: "no-config" };
@@ -795,7 +805,7 @@
         if (result.ok) {
           showToast("已保存并同步，所有设备刷新即可看到");
         } else {
-          showToast("已保存到本机。请按 supabase/云端同步配置说明.md 配置 cloudSync");
+          showToast("已保存到本机。请填写 cloud-config.js 完成云端同步");
         }
         renderCard();
         closeEditModal();

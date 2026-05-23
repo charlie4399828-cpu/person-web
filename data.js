@@ -1,20 +1,10 @@
 /**
  * 个人名片默认数据
- * 全设备共享：配置 cloudSync 后，数据保存在 Supabase 云端
+ * 云端同步配置见 cloud-config.js（不要在本文件填 Supabase 密钥）
  */
 window.CARD_DATA = {
   editPassword: "763560",
   siteUrl: "https://charlie4399828-cpu.github.io/person-web/",
-
-  /**
-   * 云端同步（见 supabase/云端同步配置说明.md）
-   * 只需填下面三项公开配置，不要填任何 Token
-   */
-  cloudSync: {
-    supabaseUrl: "",
-    supabaseAnonKey: "",
-    saveFunctionUrl: "",
-  },
 
   basicInfo: [
     { label: "姓名", value: "张三" },
