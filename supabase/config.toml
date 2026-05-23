@@ -1,0 +1,2 @@
+[functions.save-card]
+verify_jwt = false

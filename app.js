@@ -7,8 +7,10 @@
   function getCloudSync() {
     const fromFile = window.CARD_CLOUD || {};
     const fromData = defaults.cloudSync || {};
+    let baseUrl = (fromFile.supabaseUrl || fromData.supabaseUrl || "").trim();
+    baseUrl = baseUrl.replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
     return {
-      supabaseUrl: (fromFile.supabaseUrl || fromData.supabaseUrl || "").trim(),
+      supabaseUrl: baseUrl,
       supabaseAnonKey: (fromFile.supabaseAnonKey || fromData.supabaseAnonKey || "").trim(),
       saveFunctionUrl: (fromFile.saveFunctionUrl || fromData.saveFunctionUrl || "").trim(),
     };
@@ -105,14 +107,22 @@
 
   async function syncToCloud() {
     const cfg = getCloudSync();
-    const saveUrl = (cfg.saveFunctionUrl || "").trim();
+    const saveUrl = cfg.saveFunctionUrl;
     if (!saveUrl) {
       return { ok: false, reason: "no-config" };
     }
 
+    const headers = { "Content-Type": "application/json" };
+    if (cfg.supabaseAnonKey) {
+      headers.apikey = cfg.supabaseAnonKey;
+      if (cfg.supabaseAnonKey.startsWith("eyJ")) {
+        headers.Authorization = "Bearer " + cfg.supabaseAnonKey;
+      }
+    }
+
     const res = await fetch(saveUrl, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
+      headers: headers,
       body: JSON.stringify({
         password: EDIT_PASSWORD,
         data: dataForCloud(),
