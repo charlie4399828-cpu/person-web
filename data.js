@@ -1,18 +1,19 @@
 /**
  * 个人名片默认数据
- * 全设备共享数据保存在 card-data.json（通过 GitHub 同步写入）
+ * 全设备共享：配置 cloudSync 后，数据保存在 Supabase 云端
  */
 window.CARD_DATA = {
   editPassword: "763560",
   siteUrl: "https://charlie4399828-cpu.github.io/person-web/",
 
-  /** 填写 GitHub Token 后，编辑保存将同步到 card-data.json，所有设备可见 */
-  githubSync: {
-    token: "",
-    owner: "charlie4399828-cpu",
-    repo: "person-web",
-    branch: "main",
-    path: "card-data.json",
+  /**
+   * 云端同步（见 supabase/云端同步配置说明.md）
+   * 只需填下面三项公开配置，不要填任何 Token
+   */
+  cloudSync: {
+    supabaseUrl: "",
+    supabaseAnonKey: "",
+    saveFunctionUrl: "",
   },
 
   basicInfo: [

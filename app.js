@@ -21,12 +21,43 @@
   }
 
   async function fetchRemoteCardData() {
+    const cfg = defaults.cloudSync || {};
+    const url = (cfg.supabaseUrl || "").trim();
+    const key = (cfg.supabaseAnonKey || "").trim();
+
+    if (url && key) {
+      try {
+        const api =
+          url.replace(/\/$/, "") +
+          "/rest/v1/card_data?id=eq.1&select=content,updated_at";
+        const res = await fetch(api, {
+          cache: "no-store",
+          headers: {
+            apikey: key,
+            Authorization: "Bearer " + key,
+          },
+        });
+        if (res.ok) {
+          const rows = await res.json();
+          if (rows[0] && rows[0].content && Object.keys(rows[0].content).length) {
+            const content = rows[0].content;
+            if (rows[0].updated_at) {
+              content.updatedAt = new Date(rows[0].updated_at).getTime();
+            }
+            return content;
+          }
+        }
+      } catch (e) {
+        console.warn("读取 Supabase 数据失败", e);
+      }
+    }
+
     try {
       const res = await fetch("./card-data.json?t=" + Date.now(), { cache: "no-store" });
       if (!res.ok) return null;
       return await res.json();
     } catch (e) {
-      console.warn("读取云端数据失败", e);
+      console.warn("读取 card-data.json 失败", e);
       return null;
     }
   }
@@ -62,50 +93,28 @@
     };
   }
 
-  async function syncToGithub() {
-    const cfg = defaults.githubSync || {};
-    const token = (cfg.token || "").trim();
-    if (!token) {
-      return { ok: false, reason: "no-token" };
+  async function syncToCloud() {
+    const cfg = defaults.cloudSync || {};
+    const saveUrl = (cfg.saveFunctionUrl || "").trim();
+    if (!saveUrl) {
+      return { ok: false, reason: "no-config" };
     }
 
-    const owner = cfg.owner || "charlie4399828-cpu";
-    const repo = cfg.repo || "person-web";
-    const branch = cfg.branch || "main";
-    const path = cfg.path || "card-data.json";
-    const apiBase = "https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path;
-    const headers = {
-      Authorization: "Bearer " + token,
-      Accept: "application/vnd.github+json",
-      "X-GitHub-Api-Version": "2022-11-28",
-    };
-
-    let sha = null;
-    const getRes = await fetch(apiBase + "?ref=" + encodeURIComponent(branch), { headers: headers });
-    if (getRes.ok) {
-      const meta = await getRes.json();
-      sha = meta.sha;
-    } else if (getRes.status !== 404) {
-      throw new Error("读取 GitHub 文件失败：" + getRes.status);
-    }
-
-    const payload = dataForCloud();
-    const content = btoa(unescape(encodeURIComponent(JSON.stringify(payload, null, 2))));
-    const body = {
-      message: "更新名片数据",
-      content: content,
-      branch: branch,
-    };
-    if (sha) body.sha = sha;
-
-    const putRes = await fetch(apiBase, {
-      method: "PUT",
-      headers: Object.assign({ "Content-Type": "application/json" }, headers),
-      body: JSON.stringify(body),
+    const res = await fetch(saveUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        password: EDIT_PASSWORD,
+        data: dataForCloud(),
+      }),
     });
 
-    if (!putRes.ok) {
-      throw new Error("同步 GitHub 失败：" + putRes.status);
+    if (res.status === 401) {
+      throw new Error("云端密码校验失败，请检查 Supabase 的 CARD_EDIT_PASSWORD");
+    }
+    if (!res.ok) {
+      const text = await res.text();
+      throw new Error("云端同步失败：" + text);
     }
     return { ok: true };
   }
@@ -781,19 +790,19 @@
       saveBtn.textContent = "同步中…";
     }
 
-    syncToGithub()
+    syncToCloud()
       .then(function (result) {
         if (result.ok) {
           showToast("已保存并同步，所有设备刷新即可看到");
         } else {
-          showToast("已保存到本机。请在 data.js 配置 githubSync.token 以全设备同步");
+          showToast("已保存到本机。请按 supabase/云端同步配置说明.md 配置 cloudSync");
         }
         renderCard();
         closeEditModal();
       })
       .catch(function (err) {
         console.error(err);
-        showToast("本机已保存，但云端同步失败，请检查 Token");
+        showToast("本机已保存，但云端同步失败，请检查 Supabase 配置");
         renderCard();
         closeEditModal();
       })
@@ -854,7 +863,7 @@
     } catch (e) {
       return;
     }
-    syncToGithub().finally(function () {
+    syncToCloud().finally(function () {
       renderCard();
       closeEditModal();
       showToast("已恢复默认数据");
