@@ -10,7 +10,7 @@ window.CARD_DATA = {
     { label: "职位", value: "全栈开发工程师" },
     { label: "一句话介绍", value: "热爱技术，专注用户体验与工程质量" },
   ],
-  avatar: "./avatar.jpg",
+  avatar: "",
   bio:
     "5 年 Web 开发经验，熟悉 Vue、React 与 Node.js。擅长从 0 到 1 搭建产品，注重代码可维护性与性能优化。乐于分享，持续学习新技术。",
   contacts: [
@@ -52,7 +52,8 @@ window.CARD_DATA = {
   quickContact: {
     phone: "138-0013-8000",
     wechatId: "zhangsan_dev",
-    wechatQr: "./wechat-qr.png",
+    wechatQr: "",
     wechatTip: "长按识别二维码，添加微信好友",
   },
+  siteUrl: "",
 };

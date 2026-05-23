@@ -84,7 +84,79 @@
   }
 
   function persistData() {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    } catch (e) {
+      console.error(e);
+      showToast("保存失败：图片过大，请换较小的图片");
+      throw e;
+    }
+  }
+
+  const FALLBACK_AVATAR = "https://api.dicebear.com/7.x/avataaars/svg?seed=profile";
+  const MAX_IMAGE_BYTES = 800 * 1024;
+
+  function getSiteUrl() {
+    const custom = (defaults.siteUrl || "").trim();
+    if (custom) return custom;
+    return window.location.href.split("#")[0];
+  }
+
+  function compressImageFile(file, maxWidth, quality) {
+    return new Promise(function (resolve, reject) {
+      if (!file || !file.type.startsWith("image/")) {
+        reject(new Error("invalid type"));
+        return;
+      }
+      if (file.size > 12 * 1024 * 1024) {
+        reject(new Error("too large"));
+        return;
+      }
+      const reader = new FileReader();
+      reader.onload = function () {
+        const img = new Image();
+        img.onload = function () {
+          let w = img.width;
+          let h = img.height;
+          if (w > maxWidth) {
+            h = Math.round((h * maxWidth) / w);
+            w = maxWidth;
+          }
+          const canvas = document.createElement("canvas");
+          canvas.width = w;
+          canvas.height = h;
+          canvas.getContext("2d").drawImage(img, 0, 0, w, h);
+          let result = canvas.toDataURL("image/jpeg", quality);
+          if (result.length > MAX_IMAGE_BYTES && quality > 0.5) {
+            result = canvas.toDataURL("image/jpeg", quality - 0.15);
+          }
+          resolve(result);
+        };
+        img.onerror = function () {
+          reject(new Error("load failed"));
+        };
+        img.src = reader.result;
+      };
+      reader.onerror = function () {
+        reject(new Error("read failed"));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function setImagePreview(wrapId, imgId, src) {
+    const wrap = document.getElementById(wrapId);
+    const img = document.getElementById(imgId);
+    const empty = wrap.querySelector(".image-preview-empty");
+    if (src) {
+      img.src = src;
+      img.hidden = false;
+      empty.hidden = true;
+    } else {
+      img.removeAttribute("src");
+      img.hidden = true;
+      empty.hidden = false;
+    }
   }
 
   function escapeHtml(str) {
@@ -128,7 +200,7 @@
     document.getElementById("bio").textContent = data.bio;
 
     const avatar = document.getElementById("avatar");
-    avatar.src = data.avatar;
+    avatar.src = data.avatar || FALLBACK_AVATAR;
     avatar.alt = getBasicValue(basicInfo, "姓名", 0) + " 头像";
 
     document.getElementById("contactList").innerHTML = data.contacts
@@ -180,6 +252,46 @@
     document.title = (getBasicValue(basicInfo, "姓名", 0) || "个人") + " · 个人名片";
   }
 
+  /* —— 扫码访问弹窗 —— */
+
+  const shareModal = document.getElementById("shareModal");
+
+  function openShareModal() {
+    const url = getSiteUrl();
+    document.getElementById("shareUrlText").textContent = url;
+    const canvas = document.getElementById("siteQrCanvas");
+    if (typeof QRCode !== "undefined") {
+      QRCode.toCanvas(
+        canvas,
+        url,
+        { width: 220, margin: 2, color: { dark: "#000000", light: "#ffffff" } },
+        function (err) {
+          if (err) console.error(err);
+        }
+      );
+    }
+    shareModal.hidden = false;
+    document.body.classList.add("modal-open");
+  }
+
+  function closeShareModal() {
+    shareModal.hidden = true;
+    if (contactModal.hidden && editModal.hidden && authModal.hidden) {
+      document.body.classList.remove("modal-open");
+    }
+  }
+
+  document.getElementById("shareBtn").addEventListener("click", openShareModal);
+  document.getElementById("shareBtnFooter").addEventListener("click", openShareModal);
+
+  document.getElementById("copyShareUrlBtn").addEventListener("click", function () {
+    copyText(getSiteUrl(), "网页链接已复制").catch(function () {});
+  });
+
+  shareModal.querySelectorAll("[data-close-share]").forEach(function (el) {
+    el.addEventListener("click", closeShareModal);
+  });
+
   /* —— 获取联系方式弹窗 —— */
 
   const contactModal = document.getElementById("contactModal");
@@ -219,6 +331,24 @@
     const wechatId = (qc.wechatId || "").trim();
     document.getElementById("contactWechatIdDisplay").textContent = wechatId || "—";
     wechatBlock.hidden = !wechatId;
+
+    const saveQrBtn = document.getElementById("saveWechatQrBtn");
+    saveQrBtn.hidden = !qc.wechatQr;
+  }
+
+  function saveWechatQrImage() {
+    const qr = data.quickContact && data.quickContact.wechatQr;
+    if (!qr) {
+      showToast("暂无微信二维码，请管理员上传");
+      return;
+    }
+    const a = document.createElement("a");
+    a.href = qr;
+    a.download = "微信二维码.jpg";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast("二维码已保存，打开微信扫一扫 → 相册选择");
   }
 
   function copyText(text, successMsg) {
@@ -247,38 +377,6 @@
     });
   }
 
-  function openWeChatApp() {
-    const ua = navigator.userAgent || "";
-    const isAndroid = /android/i.test(ua);
-    const isIOS = /iphone|ipad|ipod/i.test(ua);
-
-    if (isAndroid) {
-      window.location.href =
-        "intent://platformapi/startapp#Intent;scheme=weixin;package=com.tencent.mm;end";
-      return;
-    }
-    if (isIOS) {
-      window.location.href = "weixin://";
-      return;
-    }
-    showToast("请在手机浏览器中打开，或手动打开微信搜索微信号");
-  }
-
-  function handleOpenWechatAdd() {
-    const wechatId = ((data.quickContact && data.quickContact.wechatId) || "").trim();
-    if (!wechatId) {
-      showToast("暂未设置微信号");
-      return;
-    }
-    copyText(wechatId, "微信号已复制，正在打开微信…")
-      .then(function () {
-        setTimeout(openWeChatApp, 400);
-      })
-      .catch(function () {
-        openWeChatApp();
-      });
-  }
-
   function openContactModal() {
     renderContactModal();
     contactModal.hidden = false;
@@ -287,7 +385,7 @@
 
   function closeContactModal() {
     contactModal.hidden = true;
-    if (editModal.hidden && authModal.hidden) {
+    if (editModal.hidden && authModal.hidden && shareModal.hidden) {
       document.body.classList.remove("modal-open");
     }
   }
@@ -303,7 +401,7 @@
     copyText(phone, "电话号码已复制").catch(function () {});
   });
 
-  document.getElementById("openWechatBtn").addEventListener("click", handleOpenWechatAdd);
+  document.getElementById("saveWechatQrBtn").addEventListener("click", saveWechatQrImage);
 
   document.getElementById("copyWechatBtn").addEventListener("click", function () {
     const wechatId = ((data.quickContact && data.quickContact.wechatId) || "").trim();
@@ -311,7 +409,7 @@
       showToast("暂未设置微信号");
       return;
     }
-    copyText(wechatId, "微信号已复制").catch(function () {});
+    copyText(wechatId, "微信号已复制，请按上方步骤在微信中添加").catch(function () {});
   });
 
   contactModal.querySelectorAll("[data-close-contact]").forEach(function (el) {
@@ -347,7 +445,7 @@
 
   function closeAuthModal() {
     authModal.hidden = true;
-    if (contactModal.hidden && editModal.hidden) {
+    if (contactModal.hidden && editModal.hidden && shareModal.hidden) {
       document.body.classList.remove("modal-open");
     }
   }
@@ -383,7 +481,7 @@
 
   function closeEditModal() {
     editModal.hidden = true;
-    if (contactModal.hidden && authModal.hidden) {
+    if (contactModal.hidden && authModal.hidden && shareModal.hidden) {
       document.body.classList.remove("modal-open");
     }
   }
@@ -475,12 +573,18 @@
 
   function fillForm() {
     const qc = data.quickContact || mergeQuickContact(null);
-    form.avatar.value = data.avatar;
+    const avatarInput = form.querySelector('input[name="avatar"]');
+    const wechatQrInput = form.querySelector('input[name="wechatQr"]');
+
+    avatarInput.value = data.avatar || "";
+    wechatQrInput.value = qc.wechatQr || "";
+    setImagePreview("avatarPreviewWrap", "avatarPreview", data.avatar);
+    setImagePreview("wechatQrPreviewWrap", "wechatQrPreview", qc.wechatQr);
+
     form.bio.value = data.bio;
     form.skills.value = data.skills.join("\n");
     form.quickPhone.value = qc.phone || "";
     form.wechatId.value = qc.wechatId || "";
-    form.wechatQr.value = qc.wechatQr || "";
     form.wechatTip.value = qc.wechatTip || "";
 
     basicInfoEditor.innerHTML = (data.basicInfo || [])
@@ -535,14 +639,17 @@
 
   function handleFormSubmit(ev) {
     ev.preventDefault();
+    const avatarInput = form.querySelector('input[name="avatar"]');
+    const wechatQrInput = form.querySelector('input[name="wechatQr"]');
+
     data = {
       basicInfo: readRepeatList(basicInfoEditor, "basicInfo"),
-      avatar: form.avatar.value.trim() || defaults.avatar,
+      avatar: avatarInput.value.trim(),
       bio: form.bio.value.trim(),
       quickContact: {
         phone: form.quickPhone.value.trim(),
         wechatId: form.wechatId.value.trim(),
-        wechatQr: form.wechatQr.value.trim(),
+        wechatQr: wechatQrInput.value.trim(),
         wechatTip: form.wechatTip.value.trim(),
       },
       contacts: readRepeatList(contactsEditor, "contact"),
@@ -565,11 +672,52 @@
       return;
     }
 
-    persistData();
+    try {
+      persistData();
+    } catch (e) {
+      return;
+    }
     renderCard();
     closeEditModal();
     showToast("名片信息已保存");
   }
+
+  function bindImageUpload(fileInputId, btnId, clearBtnId, hiddenName, previewWrapId, previewImgId, maxWidth) {
+    const fileInput = document.getElementById(fileInputId);
+    const btn = document.getElementById(btnId);
+    const clearBtn = document.getElementById(clearBtnId);
+    const hidden = form.querySelector('input[name="' + hiddenName + '"]');
+
+    btn.addEventListener("click", function () {
+      fileInput.click();
+    });
+
+    fileInput.addEventListener("change", function () {
+      const file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      showToast("正在处理图片…");
+      compressImageFile(file, maxWidth, 0.82)
+        .then(function (dataUrl) {
+          hidden.value = dataUrl;
+          setImagePreview(previewWrapId, previewImgId, dataUrl);
+          showToast("图片已就绪，记得保存修改");
+        })
+        .catch(function () {
+          showToast("图片处理失败，请换一张较小的图片");
+        })
+        .finally(function () {
+          fileInput.value = "";
+        });
+    });
+
+    clearBtn.addEventListener("click", function () {
+      hidden.value = "";
+      setImagePreview(previewWrapId, previewImgId, "");
+    });
+  }
+
+  bindImageUpload("avatarUpload", "avatarUploadBtn", "avatarClearBtn", "avatar", "avatarPreviewWrap", "avatarPreview", 400);
+  bindImageUpload("wechatQrUpload", "wechatQrUploadBtn", "wechatQrClearBtn", "wechatQr", "wechatQrPreviewWrap", "wechatQrPreview", 600);
 
   function resetToDefaults() {
     if (!confirm("确定恢复为默认示例数据？当前已保存的修改将被清除。")) return;
@@ -647,7 +795,8 @@
 
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape") return;
-    if (!contactModal.hidden) closeContactModal();
+    if (!shareModal.hidden) closeShareModal();
+    else if (!contactModal.hidden) closeContactModal();
     else if (!authModal.hidden) closeAuthModal();
     else if (!editModal.hidden) closeEditModal();
   });
@@ -678,7 +827,7 @@
       const canvas = await html2canvas(card, {
         scale: Math.min(window.devicePixelRatio || 2, 3),
         useCORS: true,
-        allowTaint: false,
+        allowTaint: true,
         backgroundColor: "#1a2332",
         logging: false,
       });
