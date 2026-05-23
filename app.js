@@ -6,23 +6,108 @@
 
   const EDIT_PASSWORD = String(defaults.editPassword || "763560");
 
-  let data = loadData();
+  let data = null;
 
   function clone(obj) {
     return JSON.parse(JSON.stringify(obj));
   }
 
-  function loadData() {
+  function pickNewerData(a, b) {
+    if (!a) return b;
+    if (!b) return a;
+    const ta = a.updatedAt || 0;
+    const tb = b.updatedAt || 0;
+    return ta >= tb ? a : b;
+  }
+
+  async function fetchRemoteCardData() {
+    try {
+      const res = await fetch("./card-data.json?t=" + Date.now(), { cache: "no-store" });
+      if (!res.ok) return null;
+      return await res.json();
+    } catch (e) {
+      console.warn("读取云端数据失败", e);
+      return null;
+    }
+  }
+
+  function readLocalCardData() {
     try {
       const saved = localStorage.getItem(STORAGE_KEY);
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        return mergeWithDefaults(parsed);
-      }
+      if (saved) return JSON.parse(saved);
     } catch (e) {
       console.warn("读取本地数据失败", e);
     }
-    return clone(defaults);
+    return null;
+  }
+
+  async function loadData() {
+    const remote = await fetchRemoteCardData();
+    const local = readLocalCardData();
+    const picked = pickNewerData(remote, local);
+    if (picked) return mergeWithDefaults(picked);
+    return mergeWithDefaults(clone(defaults));
+  }
+
+  function dataForCloud() {
+    return {
+      updatedAt: data.updatedAt || Date.now(),
+      basicInfo: data.basicInfo,
+      avatar: data.avatar,
+      bio: data.bio,
+      contacts: data.contacts,
+      experience: data.experience,
+      skills: data.skills,
+      quickContact: data.quickContact,
+    };
+  }
+
+  async function syncToGithub() {
+    const cfg = defaults.githubSync || {};
+    const token = (cfg.token || "").trim();
+    if (!token) {
+      return { ok: false, reason: "no-token" };
+    }
+
+    const owner = cfg.owner || "charlie4399828-cpu";
+    const repo = cfg.repo || "person-web";
+    const branch = cfg.branch || "main";
+    const path = cfg.path || "card-data.json";
+    const apiBase = "https://api.github.com/repos/" + owner + "/" + repo + "/contents/" + path;
+    const headers = {
+      Authorization: "Bearer " + token,
+      Accept: "application/vnd.github+json",
+      "X-GitHub-Api-Version": "2022-11-28",
+    };
+
+    let sha = null;
+    const getRes = await fetch(apiBase + "?ref=" + encodeURIComponent(branch), { headers: headers });
+    if (getRes.ok) {
+      const meta = await getRes.json();
+      sha = meta.sha;
+    } else if (getRes.status !== 404) {
+      throw new Error("读取 GitHub 文件失败：" + getRes.status);
+    }
+
+    const payload = dataForCloud();
+    const content = btoa(unescape(encodeURIComponent(JSON.stringify(payload, null, 2))));
+    const body = {
+      message: "更新名片数据",
+      content: content,
+      branch: branch,
+    };
+    if (sha) body.sha = sha;
+
+    const putRes = await fetch(apiBase, {
+      method: "PUT",
+      headers: Object.assign({ "Content-Type": "application/json" }, headers),
+      body: JSON.stringify(body),
+    });
+
+    if (!putRes.ok) {
+      throw new Error("同步 GitHub 失败：" + putRes.status);
+    }
+    return { ok: true };
   }
 
   function mergeQuickContact(qc) {
@@ -68,6 +153,7 @@
   function mergeWithDefaults(parsed) {
     const basicInfo = mergeBasicInfo(parsed);
     return {
+      updatedAt: parsed.updatedAt || 0,
       basicInfo: basicInfo,
       avatar: parsed.avatar ?? defaults.avatar,
       bio: parsed.bio ?? defaults.bio,
@@ -100,6 +186,27 @@
     const custom = (defaults.siteUrl || "").trim();
     if (custom) return custom;
     return window.location.href.split("#")[0];
+  }
+
+  function buildQrImageUrl(url) {
+    return (
+      "https://api.qrserver.com/v1/create-qr-code/?size=220x220&margin=10&data=" +
+      encodeURIComponent(url)
+    );
+  }
+
+  function renderSiteQrs() {
+    const url = getSiteUrl();
+    const qrSrc = buildQrImageUrl(url);
+    const pageQr = document.getElementById("pageSiteQr");
+    const modalQr = document.getElementById("siteQrImg");
+    const pageUrlEl = document.getElementById("pageSiteQrUrl");
+    const shareUrlEl = document.getElementById("shareUrlText");
+
+    if (pageQr) pageQr.src = qrSrc;
+    if (modalQr) modalQr.src = qrSrc;
+    if (pageUrlEl) pageUrlEl.textContent = url;
+    if (shareUrlEl) shareUrlEl.textContent = url;
   }
 
   function compressImageFile(file, maxWidth, quality) {
@@ -257,19 +364,8 @@
   const shareModal = document.getElementById("shareModal");
 
   function openShareModal() {
-    const url = getSiteUrl();
-    document.getElementById("shareUrlText").textContent = url;
-    const canvas = document.getElementById("siteQrCanvas");
-    if (typeof QRCode !== "undefined") {
-      QRCode.toCanvas(
-        canvas,
-        url,
-        { width: 220, margin: 2, color: { dark: "#000000", light: "#ffffff" } },
-        function (err) {
-          if (err) console.error(err);
-        }
-      );
-    }
+    renderSiteQrs();
+    document.getElementById("shareUrlText").textContent = getSiteUrl();
     shareModal.hidden = false;
     document.body.classList.add("modal-open");
   }
@@ -643,6 +739,7 @@
     const wechatQrInput = form.querySelector('input[name="wechatQr"]');
 
     data = {
+      updatedAt: Date.now(),
       basicInfo: readRepeatList(basicInfoEditor, "basicInfo"),
       avatar: avatarInput.value.trim(),
       bio: form.bio.value.trim(),
@@ -677,9 +774,35 @@
     } catch (e) {
       return;
     }
-    renderCard();
-    closeEditModal();
-    showToast("名片信息已保存");
+
+    const saveBtn = form.querySelector('[type="submit"]') || document.querySelector('button[form="editForm"]');
+    if (saveBtn) {
+      saveBtn.disabled = true;
+      saveBtn.textContent = "同步中…";
+    }
+
+    syncToGithub()
+      .then(function (result) {
+        if (result.ok) {
+          showToast("已保存并同步，所有设备刷新即可看到");
+        } else {
+          showToast("已保存到本机。请在 data.js 配置 githubSync.token 以全设备同步");
+        }
+        renderCard();
+        closeEditModal();
+      })
+      .catch(function (err) {
+        console.error(err);
+        showToast("本机已保存，但云端同步失败，请检查 Token");
+        renderCard();
+        closeEditModal();
+      })
+      .finally(function () {
+        if (saveBtn) {
+          saveBtn.disabled = false;
+          saveBtn.textContent = "保存修改";
+        }
+      });
   }
 
   function bindImageUpload(fileInputId, btnId, clearBtnId, hiddenName, previewWrapId, previewImgId, maxWidth) {
@@ -722,12 +845,20 @@
   function resetToDefaults() {
     if (!confirm("确定恢复为默认示例数据？当前已保存的修改将被清除。")) return;
     localStorage.removeItem(STORAGE_KEY);
-    data = clone(defaults);
+    data = mergeWithDefaults(clone(defaults));
+    data.updatedAt = Date.now();
     if (!data.basicInfo) data.basicInfo = mergeBasicInfo({});
     if (!data.quickContact) data.quickContact = mergeQuickContact(null);
-    renderCard();
-    closeEditModal();
-    showToast("已恢复默认数据");
+    try {
+      persistData();
+    } catch (e) {
+      return;
+    }
+    syncToGithub().finally(function () {
+      renderCard();
+      closeEditModal();
+      showToast("已恢复默认数据");
+    });
   }
 
   basicInfoEditor.addEventListener("click", function (ev) {
@@ -863,6 +994,12 @@
     }
   }
 
-  renderCard();
-  document.getElementById("saveBtn").addEventListener("click", saveAsImage);
+  async function initApp() {
+    data = await loadData();
+    renderCard();
+    renderSiteQrs();
+    document.getElementById("saveBtn").addEventListener("click", saveAsImage);
+  }
+
+  initApp();
 })();

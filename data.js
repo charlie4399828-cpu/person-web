@@ -1,9 +1,19 @@
 /**
- * 个人名片默认数据 — 部署前请改成你的真实信息
- * 访客看到的是这里的默认内容；你在网页里编辑的内容仅保存在本机浏览器
+ * 个人名片默认数据
+ * 全设备共享数据保存在 card-data.json（通过 GitHub 同步写入）
  */
 window.CARD_DATA = {
   editPassword: "763560",
+  siteUrl: "https://charlie4399828-cpu.github.io/person-web/",
+
+  /** 填写 GitHub Token 后，编辑保存将同步到 card-data.json，所有设备可见 */
+  githubSync: {
+    token: "",
+    owner: "charlie4399828-cpu",
+    repo: "person-web",
+    branch: "main",
+    path: "card-data.json",
+  },
 
   basicInfo: [
     { label: "姓名", value: "张三" },
@@ -55,5 +65,4 @@ window.CARD_DATA = {
     wechatQr: "",
     wechatTip: "长按识别二维码，添加微信好友",
   },
-  siteUrl: "",
 };

@@ -1,66 +1,54 @@
 # 个人名片网站
 
-响应式中文个人名片页，支持手机与电脑浏览，一键保存为 PNG 图片。
+在线地址：https://charlie4399828-cpu.github.io/person-web/
 
-## 部署前准备
+## 功能
 
-1. **编辑 `data.js`**，填入你的真实姓名、职位、联系方式等（部署后所有访客可见）
-2. **准备图片**（可选，放到项目根目录）：
-   - `avatar.jpg` — 头像
-   - `wechat-qr.png` — 微信二维码
-3. 修改 `data.js` 中的 `editPassword` 为你的管理密码（默认 `763560`）
+- 响应式名片展示，手机 / 电脑均可浏览
+- 页面内展示**扫码访问二维码**（固定链接）
+- 图片本地上传（头像、微信二维码）
+- 密码保护编辑（双击标题「个人名片」）
+- **云端同步**：保存后写入 `card-data.json`，所有设备看到相同内容
 
-## GitHub Pages 部署（方案一）
+## 全设备数据同步（必做一步）
 
-### 1. 创建 GitHub 仓库
+网页编辑默认只存本机。要手机改、电脑也能看到，需配置 **GitHub Token**：
 
-登录 [GitHub](https://github.com)，新建仓库，例如 `person-web`，设为 **Public**。
+1. 打开 GitHub → **Settings** → **Developer settings** → **Personal access tokens**
+2. 生成 Token，勾选 **`repo`** 权限
+3. 编辑 `data.js`，填入：
 
-### 2. 推送代码
+```javascript
+githubSync: {
+  token: "你的Token",
+  owner: "charlie4399828-cpu",
+  repo: "person-web",
+  branch: "main",
+  path: "card-data.json",
+},
+```
 
-在项目目录执行（将 `你的用户名` 换成你的 GitHub 用户名）：
+4. 提交并推送 `data.js`（Token 只提交一次）
+5. 之后在任意设备编辑并保存，会自动同步到 `card-data.json`
+6. 其他设备**刷新页面**即可看到最新内容
+
+> Token 会出现在公开仓库代码中，请使用仅用于此项目的 Token，可随时在 GitHub 撤销。
+
+## 部署更新
 
 ```powershell
-cd d:\Code\person_web
-git init
+cd D:\Code\person_web
 git add .
-git commit -m "个人名片网站上线"
-git branch -M main
-git remote add origin https://github.com/你的用户名/person-web.git
-git push -u origin main
+git commit -m "更新说明"
+git push
 ```
-
-### 3. 开启 GitHub Pages
-
-仓库 → **Settings** → **Pages** → **Build and deployment**：
-
-- Source: **Deploy from a branch**
-- Branch: **main** / **/ (root)**
-- 点击 **Save**
-
-约 1～2 分钟后访问：
-
-```
-https://你的用户名.github.io/person-web/
-```
-
-## 本地预览
-
-```bash
-npx serve .
-```
-
-## 使用说明
-
-- **访客**：「获取联系方式」查看电话、微信号、二维码；「保存为图片」下载名片
-- **管理员**：**双击页面标题「个人名片」** → 输入密码 → 编辑名片
-- 网页内编辑的内容保存在**当前浏览器**；要让别人看到更新，请改 `data.js` 后重新 `git push`
 
 ## 文件说明
 
 | 文件 | 说明 |
 |------|------|
-| `data.js` | 默认名片数据与管理密码 |
+| `data.js` | 默认数据、密码、站点 URL、GitHub 同步配置 |
+| `card-data.json` | 云端共享的名片数据（自动生成/更新） |
 | `index.html` | 页面结构 |
+| `app.js` | 逻辑 |
 | `styles.css` | 样式 |
-| `app.js` | 渲染、验证与导出逻辑 |
