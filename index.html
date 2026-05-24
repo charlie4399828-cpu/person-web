@@ -53,17 +53,21 @@
         <h3 class="section-title"><span class="section-icon" aria-hidden="true">◆</span>联系方式</h3>
         <ul class="contact-list" id="contactList"></ul>
       </section>
-      <section class="card-section">
+      <section class="card-section" id="bioSectionWrap">
         <h3 class="section-title"><span class="section-icon" aria-hidden="true">◆</span>个人简介</h3>
-        <p class="bio" id="bio"></p>
+        <div id="bioSectionsDisplay" class="bio-sections"></div>
       </section>
       <section class="card-section">
         <h3 class="section-title"><span class="section-icon" aria-hidden="true">◆</span>工作经历</h3>
         <ul class="timeline" id="experienceList"></ul>
       </section>
-      <section class="card-section card-section--last">
+      <section class="card-section">
         <h3 class="section-title"><span class="section-icon" aria-hidden="true">◆</span>技能标签</h3>
-        <ul class="skills" id="skillsList"></ul>
+        <div id="skillsDisplay"></div>
+      </section>
+      <section class="card-section card-section--last" id="portfolioSectionWrap" hidden>
+        <h3 class="section-title"><span class="section-icon" aria-hidden="true">◆</span>作品集</h3>
+        <div id="portfolioDisplay" class="portfolio-grid"></div>
       </section>
       <footer class="card-footer">
         <span>保存图片可分享名片</span>
@@ -198,10 +202,13 @@
               <button type="button" id="avatarClearBtn" class="btn-ghost btn-sm">清除</button>
             </div>
           </div>
-          <label class="form-field">
-            <span>个人简介</span>
-            <textarea name="bio" rows="4"></textarea>
-          </label>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend>个人简介</legend>
+          <p class="form-hint">可添加多条简介，自定义标题与内容。</p>
+          <div id="bioSectionsEditor" class="repeat-list"></div>
+          <button type="button" class="btn-add" data-add="bioSection">+ 添加简介</button>
         </fieldset>
 
         <fieldset class="form-section">
@@ -248,8 +255,16 @@
 
         <fieldset class="form-section">
           <legend>技能标签</legend>
-          <p class="form-hint">每行填写一个技能</p>
-          <textarea name="skills" rows="5" placeholder="JavaScript&#10;Vue / React"></textarea>
+          <p class="form-hint">可添加多条技能，选填分类标签。</p>
+          <div id="skillsEditor" class="repeat-list"></div>
+          <button type="button" class="btn-add" data-add="skill">+ 添加技能</button>
+        </fieldset>
+
+        <fieldset class="form-section">
+          <legend>作品集</legend>
+          <p class="form-hint">支持 JPG、PNG、GIF、WebP 图片，以及 MP4、WebM、MOV 视频（建议单个视频不超过 8MB）。</p>
+          <div id="portfolioEditor" class="repeat-list"></div>
+          <button type="button" class="btn-add" data-add="portfolio">+ 添加作品</button>
         </fieldset>
       </form>
       <footer class="modal-footer">

@@ -97,10 +97,11 @@
       updatedAt: data.updatedAt || Date.now(),
       basicInfo: data.basicInfo,
       avatar: data.avatar,
-      bio: data.bio,
+      bioSections: data.bioSections,
       contacts: data.contacts,
       experience: data.experience,
       skills: data.skills,
+      portfolio: data.portfolio,
       quickContact: data.quickContact,
     };
   }
@@ -179,16 +180,68 @@
     return "";
   }
 
+  function mergeBioSections(parsed) {
+    if (Array.isArray(parsed.bioSections) && parsed.bioSections.length) {
+      return parsed.bioSections.map(function (item) {
+        return {
+          label: item.label ?? "简介",
+          content: item.content ?? "",
+        };
+      });
+    }
+    const legacyBio = parsed.bio ?? defaults.bio ?? "";
+    if (legacyBio) {
+      return [{ label: "个人简介", content: legacyBio }];
+    }
+    if (Array.isArray(defaults.bioSections) && defaults.bioSections.length) {
+      return clone(defaults.bioSections);
+    }
+    return [{ label: "个人简介", content: "" }];
+  }
+
+  function mergeSkills(parsed) {
+    if (Array.isArray(parsed.skills) && parsed.skills.length) {
+      if (typeof parsed.skills[0] === "string") {
+        return parsed.skills.map(function (s) {
+          return { label: "", value: s };
+        });
+      }
+      return parsed.skills.map(function (item) {
+        return {
+          label: item.label ?? "",
+          value: item.value ?? "",
+        };
+      });
+    }
+    return clone(defaults.skills || []);
+  }
+
+  function mergePortfolio(parsed) {
+    if (!Array.isArray(parsed.portfolio)) {
+      return clone(defaults.portfolio || []);
+    }
+    return parsed.portfolio.map(function (item) {
+      return {
+        title: item.title ?? "",
+        desc: item.desc ?? "",
+        link: item.link ?? "",
+        mediaType: item.mediaType === "video" ? "video" : "image",
+        mediaSrc: item.mediaSrc ?? "",
+      };
+    });
+  }
+
   function mergeWithDefaults(parsed) {
     const basicInfo = mergeBasicInfo(parsed);
     return {
       updatedAt: parsed.updatedAt || 0,
       basicInfo: basicInfo,
       avatar: parsed.avatar ?? defaults.avatar,
-      bio: parsed.bio ?? defaults.bio,
+      bioSections: mergeBioSections(parsed),
       contacts: Array.isArray(parsed.contacts) ? parsed.contacts : clone(defaults.contacts),
       experience: Array.isArray(parsed.experience) ? parsed.experience : clone(defaults.experience),
-      skills: Array.isArray(parsed.skills) ? parsed.skills : clone(defaults.skills),
+      skills: mergeSkills(parsed),
+      portfolio: mergePortfolio(parsed),
       quickContact: mergeQuickContact(parsed.quickContact),
     };
   }
@@ -210,6 +263,9 @@
 
   const FALLBACK_AVATAR = "https://api.dicebear.com/7.x/avataaars/svg?seed=profile";
   const MAX_IMAGE_BYTES = 800 * 1024;
+  const MAX_VIDEO_BYTES = 8 * 1024 * 1024;
+  const PORTFOLIO_MEDIA_ACCEPT =
+    "image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,video/webm,video/quicktime,.mov";
 
   function getSiteUrl() {
     const custom = (defaults.siteUrl || "").trim();
@@ -333,7 +389,21 @@
       })
       .join("");
 
-    document.getElementById("bio").textContent = data.bio;
+    document.getElementById("bioSectionWrap").hidden = !(data.bioSections || []).length;
+    document.getElementById("bioSectionsDisplay").innerHTML = (data.bioSections || [])
+      .map(function (item) {
+        const title = item.label
+          ? '<h4 class="bio-block-title">' + escapeHtml(item.label) + "</h4>"
+          : "";
+        return (
+          '<div class="bio-block">' +
+          title +
+          '<p class="bio">' +
+          escapeHtml(item.content || "—") +
+          "</p></div>"
+        );
+      })
+      .join("");
 
     const avatar = document.getElementById("avatar");
     avatar.src = data.avatar || FALLBACK_AVATAR;
@@ -379,9 +449,81 @@
       })
       .join("");
 
-    document.getElementById("skillsList").innerHTML = data.skills
-      .map(function (s) {
-        return "<li>" + escapeHtml(s) + "</li>";
+    const skills = data.skills || [];
+    const skillsEl = document.getElementById("skillsDisplay");
+    if (!skills.length) {
+      skillsEl.innerHTML = '<ul class="skills"><li>—</li></ul>';
+    } else {
+      const groups = [];
+      const groupMap = {};
+      skills.forEach(function (s) {
+        if (!s.value) return;
+        const key = s.label || "";
+        if (!groupMap[key]) {
+          groupMap[key] = { label: key, items: [] };
+          groups.push(groupMap[key]);
+        }
+        groupMap[key].items.push(s.value);
+      });
+      skillsEl.innerHTML = groups
+        .map(function (g) {
+          const labelHtml = g.label
+            ? '<p class="skill-group-label">' + escapeHtml(g.label) + "</p>"
+            : "";
+          const pills = g.items
+            .map(function (v) {
+              return "<li>" + escapeHtml(v) + "</li>";
+            })
+            .join("");
+          return (
+            '<div class="skill-group">' + labelHtml + '<ul class="skills">' + pills + "</ul></div>"
+          );
+        })
+        .join("");
+    }
+
+    const portfolio = (data.portfolio || []).filter(function (p) {
+      return p.title || p.desc || p.mediaSrc || p.link;
+    });
+    const portfolioWrap = document.getElementById("portfolioSectionWrap");
+    portfolioWrap.hidden = !portfolio.length;
+    document.getElementById("portfolioDisplay").innerHTML = portfolio
+      .map(function (p) {
+        let mediaHtml = "";
+        if (p.mediaSrc) {
+          if (p.mediaType === "video") {
+            mediaHtml =
+              '<video class="portfolio-media" src="' +
+              escapeAttr(p.mediaSrc) +
+              '" controls playsinline preload="metadata"></video>';
+          } else {
+            mediaHtml =
+              '<img class="portfolio-media" src="' +
+              escapeAttr(p.mediaSrc) +
+              '" alt="' +
+              escapeAttr(p.title || "作品") +
+              '" />';
+          }
+        } else {
+          mediaHtml = '<div class="portfolio-media portfolio-media--empty">暂无预览</div>';
+        }
+        const linkHtml = p.link
+          ? '<a class="portfolio-link" href="' +
+            escapeAttr(p.link) +
+            '" target="_blank" rel="noopener noreferrer">' +
+            escapeHtml(p.link) +
+            "</a>"
+          : "";
+        return (
+          '<article class="portfolio-item">' +
+          '<div class="portfolio-media-wrap">' +
+          mediaHtml +
+          "</div>" +
+          (p.title ? '<h4 class="portfolio-title">' + escapeHtml(p.title) + "</h4>" : "") +
+          (p.desc ? '<p class="portfolio-desc">' + escapeHtml(p.desc) + "</p>" : "") +
+          linkHtml +
+          "</article>"
+        );
       })
       .join("");
 
@@ -550,6 +692,9 @@
   const basicInfoEditor = document.getElementById("basicInfoEditor");
   const contactsEditor = document.getElementById("contactsEditor");
   const experienceEditor = document.getElementById("experienceEditor");
+  const bioSectionsEditor = document.getElementById("bioSectionsEditor");
+  const skillsEditor = document.getElementById("skillsEditor");
+  const portfolioEditor = document.getElementById("portfolioEditor");
 
   function isEditAuthed() {
     return sessionStorage.getItem(AUTH_SESSION_KEY) === "1";
@@ -661,6 +806,121 @@
     );
   }
 
+  function bioSectionItemHtml(item, index) {
+    return (
+      '<div class="repeat-item" data-type="bioSection" data-index="' +
+      index +
+      '">' +
+      '<div class="repeat-item-header">' +
+      '<span class="repeat-item-title">简介 ' +
+      (index + 1) +
+      "</span>" +
+      '<button type="button" class="btn-remove" data-remove>删除</button>' +
+      "</div>" +
+      '<label class="form-field"><span>标题（如：个人简介、特长）</span>' +
+      '<input type="text" data-field="label" value="' +
+      escapeAttr(item.label) +
+      '" placeholder="个人简介" /></label>' +
+      '<label class="form-field"><span>内容</span>' +
+      '<textarea data-field="content" rows="4">' +
+      escapeHtml(item.content) +
+      "</textarea></label>" +
+      "</div>"
+    );
+  }
+
+  function skillItemHtml(item, index) {
+    return (
+      '<div class="repeat-item" data-type="skill" data-index="' +
+      index +
+      '">' +
+      '<div class="repeat-item-header">' +
+      '<span class="repeat-item-title">技能 ' +
+      (index + 1) +
+      "</span>" +
+      '<button type="button" class="btn-remove" data-remove>删除</button>' +
+      "</div>" +
+      '<label class="form-field"><span>分类（选填，如：前端、工具）</span>' +
+      '<input type="text" data-field="label" value="' +
+      escapeAttr(item.label) +
+      '" placeholder="留空则不分组" /></label>' +
+      '<label class="form-field"><span>技能名称</span>' +
+      '<input type="text" data-field="value" value="' +
+      escapeAttr(item.value) +
+      '" placeholder="JavaScript" /></label>' +
+      "</div>"
+    );
+  }
+
+  function portfolioPreviewInnerHtml(src, mediaType) {
+    if (!src) {
+      return '<span class="portfolio-preview-empty">未上传图片或视频</span>';
+    }
+    if (mediaType === "video") {
+      return (
+        '<video class="portfolio-media" src="' +
+        escapeAttr(src) +
+        '" controls playsinline preload="metadata"></video>'
+      );
+    }
+    return (
+      '<img class="portfolio-media" src="' +
+      escapeAttr(src) +
+      '" alt="作品预览" />'
+    );
+  }
+
+  function setPortfolioItemPreview(itemEl, src, mediaType) {
+    const wrap = itemEl.querySelector("[data-portfolio-preview]");
+    if (!wrap) return;
+    wrap.innerHTML = portfolioPreviewInnerHtml(src, mediaType);
+  }
+
+  function portfolioItemHtml(p, index) {
+    const mediaType = p.mediaType === "video" ? "video" : "image";
+    return (
+      '<div class="repeat-item" data-type="portfolio" data-index="' +
+      index +
+      '">' +
+      '<div class="repeat-item-header">' +
+      '<span class="repeat-item-title">作品 ' +
+      (index + 1) +
+      "</span>" +
+      '<button type="button" class="btn-remove" data-remove>删除</button>' +
+      "</div>" +
+      '<label class="form-field"><span>作品标题</span>' +
+      '<input type="text" data-field="title" value="' +
+      escapeAttr(p.title) +
+      '" placeholder="项目名称" /></label>' +
+      '<label class="form-field"><span>作品描述（选填）</span>' +
+      '<textarea data-field="desc" rows="2">' +
+      escapeHtml(p.desc) +
+      "</textarea></label>" +
+      '<label class="form-field"><span>外链（选填）</span>' +
+      '<input type="url" data-field="link" value="' +
+      escapeAttr(p.link || "") +
+      '" placeholder="https://..." /></label>' +
+      '<span class="form-field-label">图片 / 视频</span>' +
+      '<div class="portfolio-preview-wrap" data-portfolio-preview>' +
+      portfolioPreviewInnerHtml(p.mediaSrc, mediaType) +
+      "</div>" +
+      '<input type="hidden" data-field="mediaSrc" value="' +
+      escapeAttr(p.mediaSrc || "") +
+      '" />' +
+      '<input type="hidden" data-field="mediaType" value="' +
+      escapeAttr(mediaType) +
+      '" />' +
+      '<input type="file" data-portfolio-file accept="' +
+      PORTFOLIO_MEDIA_ACCEPT +
+      '" hidden />' +
+      '<div class="portfolio-upload-actions">' +
+      '<button type="button" class="btn-add" data-portfolio-upload>选择图片 / 视频</button>' +
+      '<button type="button" class="btn-ghost btn-sm" data-portfolio-clear-media>清除媒体</button>' +
+      "</div>" +
+      "</div>"
+    );
+  }
+
   function experienceItemHtml(e, index) {
     return (
       '<div class="repeat-item" data-type="experience" data-index="' +
@@ -706,8 +966,6 @@
     setImagePreview("avatarPreviewWrap", "avatarPreview", data.avatar);
     setImagePreview("wechatQrPreviewWrap", "wechatQrPreview", qc.wechatQr);
 
-    form.bio.value = data.bio;
-    form.skills.value = data.skills.join("\n");
     form.quickPhone.value = qc.phone || "";
     form.wechatId.value = qc.wechatId || "";
     form.wechatTip.value = qc.wechatTip || "";
@@ -715,11 +973,20 @@
     basicInfoEditor.innerHTML = (data.basicInfo || [])
       .map(basicInfoItemHtml)
       .join("");
+    bioSectionsEditor.innerHTML = (data.bioSections || [])
+      .map(bioSectionItemHtml)
+      .join("");
     contactsEditor.innerHTML = data.contacts
       .map(contactItemHtml)
       .join("");
     experienceEditor.innerHTML = data.experience
       .map(experienceItemHtml)
+      .join("");
+    skillsEditor.innerHTML = (data.skills || [])
+      .map(skillItemHtml)
+      .join("");
+    portfolioEditor.innerHTML = (data.portfolio || [])
+      .map(portfolioItemHtml)
       .join("");
   }
 
@@ -742,7 +1009,38 @@
           if (href) item.href = href;
           result.push(item);
         }
-      } else {
+      } else if (type === "bioSection") {
+        const label = el.querySelector('[data-field="label"]').value.trim();
+        const content = el.querySelector('[data-field="content"]').value.trim();
+        if (label || content) {
+          result.push({
+            label: label || "简介",
+            content: content || "",
+          });
+        }
+      } else if (type === "skill") {
+        const label = el.querySelector('[data-field="label"]').value.trim();
+        const value = el.querySelector('[data-field="value"]').value.trim();
+        if (value) {
+          result.push({ label: label, value: value });
+        }
+      } else if (type === "portfolio") {
+        const title = el.querySelector('[data-field="title"]').value.trim();
+        const desc = el.querySelector('[data-field="desc"]').value.trim();
+        const link = el.querySelector('[data-field="link"]').value.trim();
+        const mediaSrc = el.querySelector('[data-field="mediaSrc"]').value.trim();
+        const mediaTypeRaw = el.querySelector('[data-field="mediaType"]').value.trim();
+        const mediaType = mediaTypeRaw === "video" ? "video" : "image";
+        if (title || desc || link || mediaSrc) {
+          result.push({
+            title: title || "",
+            desc: desc || "",
+            link: link || "",
+            mediaSrc: mediaSrc,
+            mediaType: mediaType,
+          });
+        }
+      } else if (type === "experience") {
         const period = el.querySelector('[data-field="period"]').value.trim();
         const datetime = el.querySelector('[data-field="datetime"]').value.trim();
         const company = el.querySelector('[data-field="company"]').value.trim();
@@ -771,7 +1069,7 @@
       updatedAt: Date.now(),
       basicInfo: readRepeatList(basicInfoEditor, "basicInfo"),
       avatar: avatarInput.value.trim(),
-      bio: form.bio.value.trim(),
+      bioSections: readRepeatList(bioSectionsEditor, "bioSection"),
       quickContact: {
         phone: form.quickPhone.value.trim(),
         wechatId: form.wechatId.value.trim(),
@@ -780,12 +1078,8 @@
       },
       contacts: readRepeatList(contactsEditor, "contact"),
       experience: readRepeatList(experienceEditor, "experience"),
-      skills: form.skills.value
-        .split("\n")
-        .map(function (s) {
-          return s.trim();
-        })
-        .filter(Boolean),
+      skills: readRepeatList(skillsEditor, "skill"),
+      portfolio: readRepeatList(portfolioEditor, "portfolio"),
     };
 
     if (!data.basicInfo.length) {
@@ -871,6 +1165,101 @@
   bindImageUpload("avatarUpload", "avatarUploadBtn", "avatarClearBtn", "avatar", "avatarPreviewWrap", "avatarPreview", 400);
   bindImageUpload("wechatQrUpload", "wechatQrUploadBtn", "wechatQrClearBtn", "wechatQr", "wechatQrPreviewWrap", "wechatQrPreview", 600);
 
+  function readFileAsDataURL(file) {
+    return new Promise(function (resolve, reject) {
+      const reader = new FileReader();
+      reader.onload = function () {
+        resolve(reader.result);
+      };
+      reader.onerror = function () {
+        reject(new Error("read failed"));
+      };
+      reader.readAsDataURL(file);
+    });
+  }
+
+  function processPortfolioMediaFile(file) {
+    if (!file) return Promise.reject(new Error("no file"));
+    if (file.type.startsWith("video/")) {
+      if (file.size > MAX_VIDEO_BYTES) {
+        return Promise.reject(new Error("video too large"));
+      }
+      return readFileAsDataURL(file).then(function (dataUrl) {
+        return { dataUrl: dataUrl, mediaType: "video" };
+      });
+    }
+    if (file.type.startsWith("image/")) {
+      if (file.type === "image/svg+xml") {
+        if (file.size > 2 * 1024 * 1024) {
+          return Promise.reject(new Error("svg too large"));
+        }
+        return readFileAsDataURL(file).then(function (dataUrl) {
+          return { dataUrl: dataUrl, mediaType: "image" };
+        });
+      }
+      return compressImageFile(file, 1200, 0.85).then(function (dataUrl) {
+        return { dataUrl: dataUrl, mediaType: "image" };
+      });
+    }
+    return Promise.reject(new Error("unsupported"));
+  }
+
+  function bindRepeatListRemove(editor) {
+    editor.addEventListener("click", function (ev) {
+      const btn = ev.target.closest("[data-remove]");
+      if (!btn) return;
+      const item = btn.closest(".repeat-item");
+      if (item) item.remove();
+    });
+  }
+
+  bindRepeatListRemove(bioSectionsEditor);
+  bindRepeatListRemove(skillsEditor);
+
+  portfolioEditor.addEventListener("click", function (ev) {
+    const removeBtn = ev.target.closest("[data-remove]");
+    if (removeBtn) {
+      const item = removeBtn.closest(".repeat-item");
+      if (item) item.remove();
+      return;
+    }
+    const uploadBtn = ev.target.closest("[data-portfolio-upload]");
+    if (uploadBtn) {
+      const item = uploadBtn.closest(".repeat-item");
+      const fileInput = item && item.querySelector("[data-portfolio-file]");
+      if (fileInput) fileInput.click();
+      return;
+    }
+    const clearBtn = ev.target.closest("[data-portfolio-clear-media]");
+    if (clearBtn) {
+      const item = clearBtn.closest(".repeat-item");
+      if (!item) return;
+      item.querySelector('[data-field="mediaSrc"]').value = "";
+      item.querySelector('[data-field="mediaType"]').value = "image";
+      setPortfolioItemPreview(item, "", "image");
+    }
+  });
+
+  portfolioEditor.addEventListener("change", function (ev) {
+    if (!ev.target.matches("[data-portfolio-file]")) return;
+    const fileInput = ev.target;
+    const file = fileInput.files && fileInput.files[0];
+    const item = fileInput.closest(".repeat-item");
+    fileInput.value = "";
+    if (!file || !item) return;
+    showToast("正在处理媒体文件…");
+    processPortfolioMediaFile(file)
+      .then(function (result) {
+        item.querySelector('[data-field="mediaSrc"]').value = result.dataUrl;
+        item.querySelector('[data-field="mediaType"]').value = result.mediaType;
+        setPortfolioItemPreview(item, result.dataUrl, result.mediaType);
+        showToast("媒体已就绪，记得保存修改");
+      })
+      .catch(function () {
+        showToast("处理失败：请使用 JPG/PNG/GIF/WebP/SVG 或 MP4/WebM/MOV，视频不超过 8MB");
+      });
+  });
+
   function resetToDefaults() {
     if (!confirm("确定恢复为默认示例数据？当前已保存的修改将被清除。")) return;
     localStorage.removeItem(STORAGE_KEY);
@@ -932,6 +1321,27 @@
           "beforeend",
           experienceItemHtml(
             { period: "", datetime: "", company: "", role: "", desc: "" },
+            index
+          )
+        );
+      } else if (kind === "bioSection") {
+        const index = bioSectionsEditor.querySelectorAll('[data-type="bioSection"]').length;
+        bioSectionsEditor.insertAdjacentHTML(
+          "beforeend",
+          bioSectionItemHtml({ label: "", content: "" }, index)
+        );
+      } else if (kind === "skill") {
+        const index = skillsEditor.querySelectorAll('[data-type="skill"]').length;
+        skillsEditor.insertAdjacentHTML(
+          "beforeend",
+          skillItemHtml({ label: "", value: "" }, index)
+        );
+      } else if (kind === "portfolio") {
+        const index = portfolioEditor.querySelectorAll('[data-type="portfolio"]').length;
+        portfolioEditor.insertAdjacentHTML(
+          "beforeend",
+          portfolioItemHtml(
+            { title: "", desc: "", link: "", mediaSrc: "", mediaType: "image" },
             index
           )
         );

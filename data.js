@@ -12,8 +12,13 @@ window.CARD_DATA = {
     { label: "一句话介绍", value: "热爱技术，专注用户体验与工程质量" },
   ],
   avatar: "",
-  bio:
-    "5 年 Web 开发经验，熟悉 Vue、React 与 Node.js。擅长从 0 到 1 搭建产品，注重代码可维护性与性能优化。乐于分享，持续学习新技术。",
+  bioSections: [
+    {
+      label: "个人简介",
+      content:
+        "5 年 Web 开发经验，熟悉 Vue、React 与 Node.js。擅长从 0 到 1 搭建产品，注重代码可维护性与性能优化。乐于分享，持续学习新技术。",
+    },
+  ],
   contacts: [
     { label: "手机", value: "138-0013-8000", href: "tel:13800138000" },
     { label: "邮箱", value: "zhangsan@example.com", href: "mailto:zhangsan@example.com" },
@@ -44,12 +49,13 @@ window.CARD_DATA = {
     },
   ],
   skills: [
-    "JavaScript / TypeScript",
-    "Vue / React",
-    "Node.js",
-    "CSS / 响应式设计",
-    "Git / CI",
+    { label: "", value: "JavaScript / TypeScript" },
+    { label: "", value: "Vue / React" },
+    { label: "", value: "Node.js" },
+    { label: "", value: "CSS / 响应式设计" },
+    { label: "", value: "Git / CI" },
   ],
+  portfolio: [],
   quickContact: {
     phone: "138-0013-8000",
     wechatId: "zhangsan_dev",
