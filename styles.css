@@ -106,6 +106,9 @@ body {
   font-size: 1.125rem;
   font-weight: 600;
   color: var(--text-muted);
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
 }
 
 .btn-save,
