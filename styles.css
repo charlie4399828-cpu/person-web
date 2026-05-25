@@ -417,6 +417,25 @@ body {
   flex: 0 0 140px;
 }
 
+.section-module-actions {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 0.35rem;
+  align-items: center;
+  margin-left: auto;
+}
+
+.btn-move {
+  min-width: 2.25rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.btn-move:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
 
 .module-add-bar {
   display: flex;

@@ -653,7 +653,11 @@
       '<select data-field="section-kind">' +
       sectionKindOptions(kind) +
       "</select></label>" +
-      '<button type="button" class="btn-remove" data-remove-section>删除模块</button>' +
+      '<div class="section-module-actions">' +
+      '<button type="button" class="btn-ghost btn-sm btn-move" data-move-section-up title="上移">↑</button>' +
+      '<button type="button" class="btn-ghost btn-sm btn-move" data-move-section-down title="下移">↓</button>' +
+      '<button type="button" class="btn-remove" data-remove-section>删除</button>' +
+      "</div>" +
       "</div>" +
       '<div class="section-items">' +
       itemsHtml +
@@ -663,6 +667,35 @@
       "</button>" +
       "</div>"
     );
+  }
+
+  function updateSectionMoveButtons(editor) {
+    if (!editor) return;
+    const modules = editor.querySelectorAll(".section-module");
+    modules.forEach(function (mod, i) {
+      const up = mod.querySelector("[data-move-section-up]");
+      const down = mod.querySelector("[data-move-section-down]");
+      if (up) up.disabled = i === 0;
+      if (down) down.disabled = i === modules.length - 1;
+    });
+  }
+
+  function moveSectionModule(mod, direction) {
+    if (!mod || !mod.parentElement) return false;
+    const parent = mod.parentElement;
+    if (direction === "up") {
+      const prev = mod.previousElementSibling;
+      if (!prev || !prev.classList.contains("section-module")) return false;
+      parent.insertBefore(mod, prev);
+    } else if (direction === "down") {
+      const next = mod.nextElementSibling;
+      if (!next || !next.classList.contains("section-module")) return false;
+      parent.insertBefore(next, mod);
+    } else {
+      return false;
+    }
+    updateSectionMoveButtons(parent);
+    return true;
   }
 
   function applyModuleKind(mod, newKind, helpers) {
@@ -685,6 +718,7 @@
         return sectionModuleHtml(section, i, helpers);
       })
       .join("");
+    updateSectionMoveButtons(editor);
   }
 
   function readItemFromEl(kind, el) {
@@ -774,10 +808,31 @@
     if (!editor) return;
 
     editor.addEventListener("click", function (ev) {
+      const moveUp = ev.target.closest("[data-move-section-up]");
+      if (moveUp) {
+        const mod = moveUp.closest(".section-module");
+        if (mod && moveSectionModule(mod, "up")) {
+          helpers.showToast("已上移");
+        }
+        return;
+      }
+
+      const moveDown = ev.target.closest("[data-move-section-down]");
+      if (moveDown) {
+        const mod = moveDown.closest(".section-module");
+        if (mod && moveSectionModule(mod, "down")) {
+          helpers.showToast("已下移");
+        }
+        return;
+      }
+
       const removeSection = ev.target.closest("[data-remove-section]");
       if (removeSection) {
         const mod = removeSection.closest(".section-module");
-        if (mod) mod.remove();
+        if (mod) {
+          mod.remove();
+          updateSectionMoveButtons(editor);
+        }
         return;
       }
 
@@ -899,6 +954,7 @@
             helpers
           )
         );
+        updateSectionMoveButtons(editor);
       });
     }
   }
