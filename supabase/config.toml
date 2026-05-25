@@ -1,2 +1,5 @@
 [functions.save-card]
 verify_jwt = false
+
+[functions.admin-cards]
+verify_jwt = false

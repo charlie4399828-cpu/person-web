@@ -234,9 +234,7 @@
     const headers = { "Content-Type": "application/json" };
     if (cfg.supabaseAnonKey) {
       headers.apikey = cfg.supabaseAnonKey;
-      if (cfg.supabaseAnonKey.startsWith("eyJ")) {
-        headers.Authorization = "Bearer " + cfg.supabaseAnonKey;
-      }
+      headers.Authorization = "Bearer " + cfg.supabaseAnonKey;
     }
 
     const res = await fetch(saveUrl, {
