@@ -400,6 +400,10 @@
     return buildCardUrl(currentSlug);
   }
 
+  function getAdminPageUrl() {
+    return getBaseSiteUrl() + "admin.html";
+  }
+
   function isAnyModalOpen() {
     return [
       "shareModal",
@@ -1315,7 +1319,11 @@
     if (hint) {
       if (currentSlug === DEFAULT_SLUG) {
         hint.innerHTML =
-          '编辑保存后同步到云端，所有设备打开均可看到最新内容。站点管理请访问 <a href="admin.html" class="hint-link">管理后台</a>。';
+          '编辑保存后同步到云端，所有设备打开均可看到最新内容。站点管理：<a href="' +
+          escapeAttr(getAdminPageUrl()) +
+          '" class="hint-link">管理后台</a>（地址 ' +
+          escapeHtml(getAdminPageUrl()) +
+          "）";
       } else if (needsCloudCreate(currentSlug)) {
         hint.textContent = "名片尚未保存到云端。编辑完成后请点击「保存修改」，并务必保存专属链接。";
       } else {
@@ -1428,6 +1436,11 @@
   }
 
   async function initApp() {
+    if (new URLSearchParams(window.location.search).get("admin") === "1") {
+      window.location.replace(getAdminPageUrl());
+      return;
+    }
+
     currentSlug = getCardSlugFromUrl();
     data = await loadData(currentSlug);
     renderCard();

@@ -58,7 +58,12 @@
       showLogin();
       throw new Error("管理员密码错误或已过期");
     }
-    if (!res.ok) throw new Error(body.error || "请求失败");
+    if (!res.ok) {
+      if (res.status === 404) {
+        throw new Error("admin-cards 函数未部署，请运行 supabase functions deploy admin-cards");
+      }
+      throw new Error(body.error || "请求失败 (" + res.status + ")");
+    }
     return body;
   }
 
@@ -237,5 +242,11 @@
     });
   } else {
     showLogin();
+  }
+
+  const adminUrlEl = document.getElementById("adminPageUrl");
+  if (adminUrlEl) {
+    const url = (defaults.siteUrl || "").trim() || (location.origin + location.pathname.replace(/\/admin\.html.*$/, "/"));
+    adminUrlEl.textContent = url.replace(/\/$/, "") + "/admin.html";
   }
 })();
