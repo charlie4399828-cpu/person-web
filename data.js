@@ -62,11 +62,10 @@ window.CARD_DATA = {
       kind: "tags",
       title: "技能标签",
       items: [
-        { label: "", value: "JavaScript / TypeScript" },
-        { label: "", value: "Vue / React" },
-        { label: "", value: "Node.js" },
-        { label: "", value: "CSS / 响应式设计" },
-        { label: "", value: "Git / CI" },
+        {
+          label: "",
+          value: "JavaScript / TypeScript Vue / React Node.js CSS / 响应式设计 Git / CI",
+        },
       ],
     },
   ],

@@ -405,6 +405,19 @@ body {
   min-width: 140px;
 }
 
+.form-field--kind {
+  min-width: 140px;
+}
+
+.form-field--kind select {
+  width: 100%;
+}
+
+.section-module-header .form-field--kind {
+  flex: 0 0 140px;
+}
+
+
 .module-add-bar {
   display: flex;
   flex-wrap: wrap;

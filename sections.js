@@ -4,11 +4,56 @@
 (function (global) {
   const SECTION_KINDS = {
     "contact-list": { label: "联系方式", itemLabel: "联系方式", defaultTitle: "联系方式" },
-    "text-blocks": { label: "文本简介", itemLabel: "简介", defaultTitle: "个人简介" },
+    "text-blocks": { label: "自由文本", itemLabel: "段落", defaultTitle: "个人简介" },
     timeline: { label: "时间线经历", itemLabel: "经历", defaultTitle: "工作经历" },
-    tags: { label: "技能标签", itemLabel: "技能", defaultTitle: "技能标签" },
+    tags: { label: "标签列表", itemLabel: "标签组", defaultTitle: "技能标签" },
     portfolio: { label: "作品集", itemLabel: "作品", defaultTitle: "作品集" },
   };
+
+  function getSectionMeta(kind) {
+    return SECTION_KINDS[kind] || SECTION_KINDS["text-blocks"];
+  }
+
+  /** 用 、或空格拆分标签；含 、 时保留括号内空格 */
+  function parseTagValues(text) {
+    const raw = String(text || "").trim();
+    if (!raw) return [];
+    if (/[、,，]/.test(raw)) {
+      return raw
+        .split(/[、,，]+/)
+        .map(function (s) {
+          return s.trim();
+        })
+        .filter(Boolean);
+    }
+    return raw
+      .split(/\s+/)
+      .map(function (s) {
+        return s.trim();
+      })
+      .filter(Boolean);
+  }
+
+  function tagsItemHasContent(item) {
+    return parseTagValues(item && item.value).length > 0;
+  }
+
+  function sectionKindOptions(selected) {
+    return Object.keys(SECTION_KINDS)
+      .map(function (key) {
+        const meta = SECTION_KINDS[key];
+        return (
+          '<option value="' +
+          key +
+          '"' +
+          (key === selected ? " selected" : "") +
+          ">" +
+          meta.label +
+          "</option>"
+        );
+      })
+      .join("");
+  }
 
   function emptyItem(kind) {
     if (kind === "contact-list") return { label: "", value: "", href: "" };
@@ -25,7 +70,7 @@
 
   function normalizeSection(section) {
     const kind = section.kind || "text-blocks";
-    const meta = SECTION_KINDS[kind] || SECTION_KINDS["text-blocks"];
+    const meta = getSectionMeta(kind);
     const items = Array.isArray(section.items)
       ? section.items.filter(function (item) {
           return item && typeof item === "object";
@@ -180,7 +225,7 @@
     if (kind === "timeline") {
       return !!(item.period || item.company || item.role || item.desc || item.link || item.image);
     }
-    if (kind === "tags") return !!item.value;
+    if (kind === "tags") return tagsItemHasContent(item);
     if (kind === "portfolio") {
       return !!(item.title || item.desc || item.link || item.mediaSrc);
     }
@@ -320,18 +365,22 @@
       const groupMap = {};
       items.forEach(function (s) {
         const key = s.label || "";
+        const tagList = parseTagValues(s.value);
+        if (!tagList.length) return;
         if (!groupMap[key]) {
-          groupMap[key] = { label: key, items: [] };
+          groupMap[key] = { label: key, tags: [] };
           groups.push(groupMap[key]);
         }
-        groupMap[key].items.push(s.value);
+        tagList.forEach(function (tag) {
+          groupMap[key].tags.push(tag);
+        });
       });
       return groups
         .map(function (g) {
           const labelHtml = g.label
             ? '<p class="skill-group-label">' + escapeHtml(g.label) + "</p>"
             : "";
-          const pills = g.items
+          const pills = g.tags
             .map(function (v) {
               return "<li>" + escapeHtml(v) + "</li>";
             })
@@ -416,7 +465,7 @@
     const escapeAttr = helpers.escapeAttr;
     const escapeHtml = helpers.escapeHtml;
     const PORTFOLIO_MEDIA_ACCEPT = helpers.PORTFOLIO_MEDIA_ACCEPT;
-    const meta = SECTION_KINDS[kind] || SECTION_KINDS["text-blocks"];
+    const meta = getSectionMeta(kind);
 
     if (kind === "contact-list") {
       return (
@@ -520,12 +569,15 @@
         " " +
         (index + 1) +
         '</span><button type="button" class="btn-remove" data-remove-item>删除</button></div>' +
-        '<label class="form-field"><span>分类（选填）</span><input type="text" data-field="label" value="' +
+        '<label class="form-field"><span>分组名（选填，如：证书）</span>' +
+        '<input type="text" data-field="label" value="' +
         escapeAttr(item.label) +
-        '" /></label>' +
-        '<label class="form-field"><span>标签名称</span><input type="text" data-field="value" value="' +
-        escapeAttr(item.value) +
-        '" /></label></div>'
+        '" placeholder="留空则不分组" /></label>' +
+        '<label class="form-field"><span>标签内容</span>' +
+        '<textarea data-field="value" rows="3" placeholder="多个标签用空格或 、 分隔">' +
+        escapeHtml(item.value) +
+        "</textarea></label>" +
+        '<p class="form-hint">保存后每个标签独立显示为一个圆角标签</p></div>'
       );
     }
 
@@ -577,7 +629,7 @@
   function sectionModuleHtml(section, sectionIndex, helpers) {
     const escapeAttr = helpers.escapeAttr;
     const kind = section.kind;
-    const meta = SECTION_KINDS[kind] || SECTION_KINDS["text-blocks"];
+    const meta = getSectionMeta(kind);
     const itemsHtml = (section.items || [])
       .map(function (item, i) {
         return sectionItemHtml(kind, item, i, helpers);
@@ -597,11 +649,12 @@
       '" placeholder="' +
       escapeAttr(meta.defaultTitle) +
       '" /></label>' +
+      '<label class="form-field form-field--kind"><span>模块类型</span>' +
+      '<select data-field="section-kind">' +
+      sectionKindOptions(kind) +
+      "</select></label>" +
       '<button type="button" class="btn-remove" data-remove-section>删除模块</button>' +
       "</div>" +
-      '<p class="form-hint section-kind-label">类型：' +
-      meta.label +
-      "</p>" +
       '<div class="section-items">' +
       itemsHtml +
       "</div>" +
@@ -610,6 +663,19 @@
       "</button>" +
       "</div>"
     );
+  }
+
+  function applyModuleKind(mod, newKind, helpers) {
+    const meta = getSectionMeta(newKind);
+    mod.setAttribute("data-section-kind", newKind);
+    const kindSelect = mod.querySelector('[data-field="section-kind"]');
+    if (kindSelect) kindSelect.value = newKind;
+    const container = mod.querySelector(".section-items");
+    if (container) {
+      container.innerHTML = sectionItemHtml(newKind, emptyItem(newKind), 0, helpers);
+    }
+    const addBtn = mod.querySelector("[data-add-section-item]");
+    if (addBtn) addBtn.textContent = "+ 添加" + meta.itemLabel;
   }
 
   function fillSectionsEditor(editor, sections, helpers) {
@@ -651,8 +717,8 @@
     if (kind === "tags") {
       const label = el.querySelector('[data-field="label"]').value.trim();
       const value = el.querySelector('[data-field="value"]').value.trim();
-      if (!value) return null;
-      return { label, value };
+      if (!parseTagValues(value).length) return null;
+      return { label: label, value: value };
     }
     if (kind === "portfolio") {
       const title = el.querySelector('[data-field="title"]').value.trim();
@@ -672,7 +738,8 @@
     const modules = editor.querySelectorAll(".section-module");
     const result = [];
     modules.forEach(function (mod) {
-      const kind = mod.getAttribute("data-section-kind");
+      const kindEl = mod.querySelector('[data-field="section-kind"]');
+      const kind = kindEl ? kindEl.value : mod.getAttribute("data-section-kind");
       const titleEl = mod.querySelector('[data-field="section-title"]');
       const title = titleEl ? titleEl.value.trim() : "";
       const items = [];
@@ -683,7 +750,7 @@
       if (title || items.length) {
         result.push({
           kind: kind,
-          title: title || (SECTION_KINDS[kind] && SECTION_KINDS[kind].defaultTitle) || "未命名",
+          title: title || getSectionMeta(kind).defaultTitle || "未命名",
           items: items,
         });
       }
@@ -788,6 +855,16 @@
         return;
       }
 
+      if (ev.target.matches("[data-field=\"section-kind\"]")) {
+        const mod = ev.target.closest(".section-module");
+        if (!mod) return;
+        const newKind = ev.target.value;
+        if (newKind === mod.getAttribute("data-section-kind")) return;
+        applyModuleKind(mod, newKind, helpers);
+        helpers.showToast("已切换模块类型，请重新填写条目内容");
+        return;
+      }
+
       if (ev.target.matches("[data-portfolio-file]")) {
         const fileInput = ev.target;
         const file = fileInput.files && fileInput.files[0];
@@ -812,7 +889,7 @@
     if (addBtn && kindSelect) {
       addBtn.addEventListener("click", function () {
         const kind = kindSelect.value;
-        const meta = SECTION_KINDS[kind] || SECTION_KINDS["text-blocks"];
+        const meta = getSectionMeta(kind);
         const index = editor.querySelectorAll(".section-module").length;
         editor.insertAdjacentHTML(
           "beforeend",
