@@ -49,26 +49,7 @@
         </div>
         <div class="card-intro" id="basicInfoDisplay"></div>
       </div>
-      <section class="card-section">
-        <h3 class="section-title"><span class="section-icon" aria-hidden="true">◆</span>联系方式</h3>
-        <ul class="contact-list" id="contactList"></ul>
-      </section>
-      <section class="card-section" id="bioSectionWrap">
-        <h3 class="section-title"><span class="section-icon" aria-hidden="true">◆</span>个人简介</h3>
-        <div id="bioSectionsDisplay" class="bio-sections"></div>
-      </section>
-      <section class="card-section">
-        <h3 class="section-title"><span class="section-icon" aria-hidden="true">◆</span>工作经历</h3>
-        <ul class="timeline" id="experienceList"></ul>
-      </section>
-      <section class="card-section">
-        <h3 class="section-title"><span class="section-icon" aria-hidden="true">◆</span>技能标签</h3>
-        <div id="skillsDisplay"></div>
-      </section>
-      <section class="card-section card-section--last" id="portfolioSectionWrap" hidden>
-        <h3 class="section-title"><span class="section-icon" aria-hidden="true">◆</span>作品集</h3>
-        <div id="portfolioDisplay" class="portfolio-grid"></div>
-      </section>
+      <div id="cardSectionsDisplay" class="card-sections"></div>
       <footer class="card-footer">
         <span>保存图片可分享名片</span>
       </footer>
@@ -205,10 +186,22 @@
         </fieldset>
 
         <fieldset class="form-section">
-          <legend>个人简介</legend>
-          <p class="form-hint">可添加多条简介，自定义标题与内容。</p>
-          <div id="bioSectionsEditor" class="repeat-list"></div>
-          <button type="button" class="btn-add" data-add="bioSection">+ 添加简介</button>
+          <legend>名片内容模块</legend>
+          <p class="form-hint">可自由添加、删除模块并自定义标题（如「项目经历」）。模块内条目可增减；链接、图片等有内容后才在名片上显示。</p>
+          <div id="cardSectionsEditor" class="section-modules"></div>
+          <div class="module-add-bar">
+            <label class="form-field form-field--inline">
+              <span>模块类型</span>
+              <select id="addSectionKind">
+                <option value="contact-list">联系方式</option>
+                <option value="text-blocks">文本简介</option>
+                <option value="timeline">时间线经历</option>
+                <option value="tags">技能标签</option>
+                <option value="portfolio">作品集</option>
+              </select>
+            </label>
+            <button type="button" class="btn-add" id="addCardSectionBtn">+ 添加模块</button>
+          </div>
         </fieldset>
 
         <fieldset class="form-section">
@@ -241,31 +234,6 @@
           </label>
         </fieldset>
 
-        <fieldset class="form-section">
-          <legend>名片内联系方式列表</legend>
-          <div id="contactsEditor" class="repeat-list"></div>
-          <button type="button" class="btn-add" data-add="contact">+ 添加联系方式</button>
-        </fieldset>
-
-        <fieldset class="form-section">
-          <legend>工作经历</legend>
-          <div id="experienceEditor" class="repeat-list"></div>
-          <button type="button" class="btn-add" data-add="experience">+ 添加工作经历</button>
-        </fieldset>
-
-        <fieldset class="form-section">
-          <legend>技能标签</legend>
-          <p class="form-hint">可添加多条技能，选填分类标签。</p>
-          <div id="skillsEditor" class="repeat-list"></div>
-          <button type="button" class="btn-add" data-add="skill">+ 添加技能</button>
-        </fieldset>
-
-        <fieldset class="form-section">
-          <legend>作品集</legend>
-          <p class="form-hint">支持 JPG、PNG、GIF、WebP 图片，以及 MP4、WebM、MOV 视频（建议单个视频不超过 8MB）。</p>
-          <div id="portfolioEditor" class="repeat-list"></div>
-          <button type="button" class="btn-add" data-add="portfolio">+ 添加作品</button>
-        </fieldset>
       </form>
       <footer class="modal-footer">
         <button type="button" class="btn-ghost" id="resetBtn">恢复默认</button>
@@ -280,6 +248,7 @@
   <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
   <script src="cloud-config.js"></script>
   <script src="data.js"></script>
+  <script src="sections.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

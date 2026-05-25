@@ -12,50 +12,64 @@ window.CARD_DATA = {
     { label: "一句话介绍", value: "热爱技术，专注用户体验与工程质量" },
   ],
   avatar: "",
-  bioSections: [
+  cardSections: [
     {
-      label: "个人简介",
-      content:
-        "5 年 Web 开发经验，熟悉 Vue、React 与 Node.js。擅长从 0 到 1 搭建产品，注重代码可维护性与性能优化。乐于分享，持续学习新技术。",
-    },
-  ],
-  contacts: [
-    { label: "手机", value: "138-0013-8000", href: "tel:13800138000" },
-    { label: "邮箱", value: "zhangsan@example.com", href: "mailto:zhangsan@example.com" },
-    { label: "微信", value: "zhangsan_dev" },
-    { label: "所在地", value: "中国 · 北京" },
-  ],
-  experience: [
-    {
-      period: "2022.01 — 至今",
-      datetime: "2022-01",
-      company: "某某科技有限公司",
-      role: "高级前端工程师",
-      desc: "负责核心业务前端架构与组件库建设，推动性能优化，首屏加载时间降低 40%。",
+      kind: "contact-list",
+      title: "联系方式",
+      items: [
+        { label: "手机", value: "138-0013-8000", href: "tel:13800138000" },
+        { label: "邮箱", value: "zhangsan@example.com", href: "mailto:zhangsan@example.com" },
+        { label: "微信", value: "zhangsan_dev" },
+        { label: "所在地", value: "中国 · 北京" },
+      ],
     },
     {
-      period: "2019.06 — 2021.12",
-      datetime: "2019-06",
-      company: "创新互联网公司",
-      role: "前端开发工程师",
-      desc: "参与多个 B 端管理系统开发，独立完成权限模块与数据可视化大屏。",
+      kind: "text-blocks",
+      title: "个人简介",
+      items: [
+        {
+          label: "个人简介",
+          content:
+            "5 年 Web 开发经验，熟悉 Vue、React 与 Node.js。擅长从 0 到 1 搭建产品，注重代码可维护性与性能优化。乐于分享，持续学习新技术。",
+        },
+      ],
     },
     {
-      period: "2018.07 — 2019.05",
-      datetime: "2018-07",
-      company: "起步科技工作室",
-      role: "实习开发",
-      desc: "协助官网与活动页开发，熟悉 Git 协作与敏捷流程。",
+      kind: "timeline",
+      title: "工作经历",
+      items: [
+        {
+          period: "2022.01 — 至今",
+          datetime: "2022-01",
+          company: "某某科技有限公司",
+          role: "高级前端工程师",
+          desc: "负责核心业务前端架构与组件库建设，推动性能优化，首屏加载时间降低 40%。",
+          link: "",
+          image: "",
+        },
+        {
+          period: "2019.06 — 2021.12",
+          datetime: "2019-06",
+          company: "创新互联网公司",
+          role: "前端开发工程师",
+          desc: "参与多个 B 端管理系统开发，独立完成权限模块与数据可视化大屏。",
+          link: "",
+          image: "",
+        },
+      ],
+    },
+    {
+      kind: "tags",
+      title: "技能标签",
+      items: [
+        { label: "", value: "JavaScript / TypeScript" },
+        { label: "", value: "Vue / React" },
+        { label: "", value: "Node.js" },
+        { label: "", value: "CSS / 响应式设计" },
+        { label: "", value: "Git / CI" },
+      ],
     },
   ],
-  skills: [
-    { label: "", value: "JavaScript / TypeScript" },
-    { label: "", value: "Vue / React" },
-    { label: "", value: "Node.js" },
-    { label: "", value: "CSS / 响应式设计" },
-    { label: "", value: "Git / CI" },
-  ],
-  portfolio: [],
   quickContact: {
     phone: "138-0013-8000",
     wechatId: "zhangsan_dev",
