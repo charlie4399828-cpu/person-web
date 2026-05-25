@@ -15,6 +15,12 @@
     <header class="page-header">
       <h1 id="pageTitle" class="page-title">个人名片</h1>
       <div class="header-actions">
+        <button type="button" id="createCardBtnHeader" class="btn-secondary" data-open-create aria-label="制作我的名片">
+          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
+            <path d="M12 5v14M5 12h14"/>
+          </svg>
+          <span class="btn-label">制作名片</span>
+        </button>
         <button type="button" id="shareBtn" class="btn-secondary" aria-label="扫码访问名片">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <rect x="3" y="3" width="7" height="7"/>
@@ -62,7 +68,15 @@
         <img id="pageSiteQr" class="page-site-qr" src="" alt="扫码访问 https://charlie4399828-cpu.github.io/person-web/" />
       </div>
       <p id="pageSiteQrUrl" class="page-qr-url"></p>
+      <p id="shareSlugHint" class="page-qr-url page-qr-url--slug" hidden></p>
       <button type="button" id="shareBtnFooter" class="btn-ghost btn-block">放大查看 / 复制链接</button>
+    </section>
+
+    <section class="create-card-banner" id="createCardBanner" aria-label="制作名片">
+      <div class="create-card-banner-inner">
+        <p class="create-card-banner-text">喜欢这张名片？你也可以免费制作属于自己的在线名片，生成专属链接分享给朋友。</p>
+        <button type="button" id="createCardBtn" class="btn-save" data-open-create>制作我的名片</button>
+      </div>
     </section>
 
     <p class="hint" id="editEntryHint">编辑保存后同步到云端，所有设备打开均可看到最新内容。</p>
@@ -239,6 +253,36 @@
         <button type="button" class="btn-ghost" id="resetBtn">恢复默认</button>
         <button type="button" class="btn-ghost" data-close>取消</button>
         <button type="submit" form="editForm" class="btn-save">保存修改</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="createModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="createModalTitle" hidden>
+    <div class="modal-backdrop" data-close-create></div>
+    <div class="modal-panel modal-panel--compact">
+      <header class="modal-header">
+        <h2 id="createModalTitle" class="modal-title">制作我的名片</h2>
+        <button type="button" class="modal-close" data-close-create aria-label="关闭">×</button>
+      </header>
+      <form id="createForm" class="modal-body">
+        <p class="form-hint">免费创建你的在线名片，获得专属分享链接。请设置编辑密码（至少 4 位），用于日后修改名片内容。</p>
+        <label class="form-field">
+          <span>编辑密码</span>
+          <input type="password" name="password" autocomplete="new-password" minlength="4" required placeholder="至少 4 位" />
+        </label>
+        <label class="form-field">
+          <span>确认密码</span>
+          <input type="password" name="password2" autocomplete="new-password" minlength="4" required placeholder="再次输入密码" />
+        </label>
+        <label class="form-field">
+          <span>名片 ID（选填）</span>
+          <input type="text" name="requestedSlug" pattern="[a-z0-9][a-z0-9-]{2,31}" placeholder="如 zhangsan，留空则自动生成" autocapitalize="off" spellcheck="false" />
+        </label>
+        <p class="form-hint">名片 ID 用于链接地址，仅支持小写字母、数字和连字符。创建后可通过「扫码访问」复制专属链接。</p>
+      </form>
+      <footer class="modal-footer">
+        <button type="button" class="btn-ghost" data-close-create>取消</button>
+        <button type="submit" form="createForm" class="btn-save">创建名片</button>
       </footer>
     </div>
   </div>

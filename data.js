@@ -3,6 +3,7 @@
  * 云端同步配置见 cloud-config.js（不要在本文件填 Supabase 密钥）
  */
 window.CARD_DATA = {
+  defaultCardSlug: "default",
   editPassword: "763560",
   siteUrl: "https://charlie4399828-cpu.github.io/person-web/",
 

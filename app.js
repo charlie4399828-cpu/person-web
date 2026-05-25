@@ -1,8 +1,46 @@
 (function () {
-  const STORAGE_KEY = "person_web_card_data";
-  const AUTH_SESSION_KEY = "person_web_edit_authed";
   const defaults = window.CARD_DATA;
   if (!defaults) return;
+
+  const DEFAULT_SLUG = String(defaults.defaultCardSlug || "default").trim().toLowerCase() || "default";
+  const LEGACY_EDIT_PASSWORD = String(defaults.editPassword || "763560");
+
+  let currentSlug = DEFAULT_SLUG;
+  let sessionEditPassword = "";
+
+  function storageKey() {
+    return "person_web_card_" + currentSlug;
+  }
+
+  function authSessionKey() {
+    return "person_web_edit_authed_" + currentSlug;
+  }
+
+  function authPasswordKey() {
+    return "person_web_edit_pwd_" + currentSlug;
+  }
+
+  function getCardSlugFromUrl() {
+    const p = new URLSearchParams(window.location.search);
+    const raw = (p.get("card") || DEFAULT_SLUG).trim().toLowerCase();
+    if (/^[a-z0-9][a-z0-9-]{2,31}$/.test(raw)) return raw;
+    return DEFAULT_SLUG;
+  }
+
+  function getBaseSiteUrl() {
+    const custom = (defaults.siteUrl || "").trim();
+    if (custom) return custom.split("?")[0].replace(/\/$/, "") + "/";
+    const path = window.location.pathname.replace(/\/[^/]*$/, "/");
+    return window.location.origin + path;
+  }
+
+  function buildCardUrl(slug) {
+    const base = getBaseSiteUrl();
+    if (!slug || slug === DEFAULT_SLUG) return base;
+    return base + "?card=" + encodeURIComponent(slug);
+  }
+
+  let data = null;
 
   function getCloudSync() {
     const fromFile = window.CARD_CLOUD || {};
@@ -16,10 +54,6 @@
     };
   }
 
-  const EDIT_PASSWORD = String(defaults.editPassword || "763560");
-
-  let data = null;
-
   function clone(obj) {
     return JSON.parse(JSON.stringify(obj));
   }
@@ -32,7 +66,7 @@
     return ta >= tb ? a : b;
   }
 
-  async function fetchRemoteCardData() {
+  async function fetchRemoteCardData(slug) {
     const cfg = getCloudSync();
     const url = (cfg.supabaseUrl || "").trim();
     const key = (cfg.supabaseAnonKey || "").trim();
@@ -41,7 +75,9 @@
       try {
         const api =
           url.replace(/\/$/, "") +
-          "/rest/v1/card_data?id=eq.1&select=content,updated_at";
+          "/rest/v1/cards_public?slug=eq." +
+          encodeURIComponent(slug) +
+          "&select=content,updated_at";
         const res = await fetch(api, {
           cache: "no-store",
           headers: {
@@ -60,23 +96,51 @@
           }
         }
       } catch (e) {
-        console.warn("读取 Supabase 数据失败", e);
+        console.warn("读取 cards_public 失败", e);
+      }
+
+      if (slug === DEFAULT_SLUG) {
+        try {
+          const legacyApi =
+            url.replace(/\/$/, "") + "/rest/v1/card_data?id=eq.1&select=content,updated_at";
+          const res = await fetch(legacyApi, {
+            cache: "no-store",
+            headers: {
+              apikey: key,
+              Authorization: "Bearer " + key,
+            },
+          });
+          if (res.ok) {
+            const rows = await res.json();
+            if (rows[0] && rows[0].content && Object.keys(rows[0].content).length) {
+              const content = rows[0].content;
+              if (rows[0].updated_at) {
+                content.updatedAt = new Date(rows[0].updated_at).getTime();
+              }
+              return content;
+            }
+          }
+        } catch (e) {
+          console.warn("读取 legacy card_data 失败", e);
+        }
       }
     }
 
-    try {
-      const res = await fetch("./card-data.json?t=" + Date.now(), { cache: "no-store" });
-      if (!res.ok) return null;
-      return await res.json();
-    } catch (e) {
-      console.warn("读取 card-data.json 失败", e);
-      return null;
+    if (slug === DEFAULT_SLUG) {
+      try {
+        const res = await fetch("./card-data.json?t=" + Date.now(), { cache: "no-store" });
+        if (res.ok) return await res.json();
+      } catch (e) {
+        console.warn("读取 card-data.json 失败", e);
+      }
     }
+
+    return null;
   }
 
   function readLocalCardData() {
     try {
-      const saved = localStorage.getItem(STORAGE_KEY);
+      const saved = localStorage.getItem(storageKey());
       if (saved) return JSON.parse(saved);
     } catch (e) {
       console.warn("读取本地数据失败", e);
@@ -84,11 +148,19 @@
     return null;
   }
 
-  async function loadData() {
-    const remote = await fetchRemoteCardData();
+  async function loadData(slug) {
+    currentSlug = slug || getCardSlugFromUrl();
+    sessionEditPassword = sessionStorage.getItem(authPasswordKey()) || "";
+    const remote = await fetchRemoteCardData(currentSlug);
     const local = readLocalCardData();
     const picked = pickNewerData(remote, local);
     if (picked) return mergeWithDefaults(picked);
+    if (currentSlug !== DEFAULT_SLUG) {
+      const blank = mergeWithDefaults(clone(defaults));
+      if (blank.basicInfo && blank.basicInfo[0]) blank.basicInfo[0].value = "我的姓名";
+      if (blank.basicInfo && blank.basicInfo[1]) blank.basicInfo[1].value = "我的职位";
+      return blank;
+    }
     return mergeWithDefaults(clone(defaults));
   }
 
@@ -102,7 +174,7 @@
     };
   }
 
-  async function syncToCloud() {
+  async function callCardApi(payload) {
     const cfg = getCloudSync();
     const saveUrl = cfg.saveFunctionUrl;
     if (!saveUrl) {
@@ -120,20 +192,89 @@
     const res = await fetch(saveUrl, {
       method: "POST",
       headers: headers,
-      body: JSON.stringify({
-        password: EDIT_PASSWORD,
-        data: dataForCloud(),
-      }),
+      body: JSON.stringify(payload),
     });
 
-    if (res.status === 401) {
-      throw new Error("云端密码校验失败，请检查 Supabase 的 CARD_EDIT_PASSWORD");
+    let body = {};
+    try {
+      body = await res.json();
+    } catch (e) {
+      body = {};
     }
-    if (!res.ok) {
-      const text = await res.text();
-      throw new Error("云端同步失败：" + text);
+
+    return { ok: res.ok, status: res.status, body: body };
+  }
+
+  function getEditPasswordForSync() {
+    if (sessionEditPassword) return sessionEditPassword;
+    return LEGACY_EDIT_PASSWORD;
+  }
+
+  async function verifyEditPassword(password) {
+    if (currentSlug === DEFAULT_SLUG && password === LEGACY_EDIT_PASSWORD) {
+      return true;
+    }
+    const result = await callCardApi({
+      action: "verify",
+      slug: currentSlug,
+      password: password,
+    });
+    return result.ok && result.body && result.body.ok;
+  }
+
+  async function syncToCloud() {
+    const password = getEditPasswordForSync();
+    if (!password) {
+      return { ok: false, reason: "no-password" };
+    }
+
+    const result = await callCardApi({
+      action: "save",
+      slug: currentSlug,
+      password: password,
+      data: dataForCloud(),
+    });
+
+    if (result.status === 401) {
+      throw new Error("密码错误，请重新验证后再保存");
+    }
+    if (!result.ok) {
+      throw new Error("云端同步失败：" + (result.body.error || result.status));
     }
     return { ok: true };
+  }
+
+  async function createNewCard(password, requestedSlug) {
+    const blank = mergeWithDefaults(clone(defaults));
+    blank.updatedAt = Date.now();
+    if (blank.basicInfo && blank.basicInfo[0]) {
+      blank.basicInfo[0].value = "我的姓名";
+    }
+    if (blank.basicInfo && blank.basicInfo[1]) {
+      blank.basicInfo[1].value = "我的职位";
+    }
+
+    const payload = {
+      action: "create",
+      password: password,
+      data: {
+        updatedAt: blank.updatedAt,
+        basicInfo: blank.basicInfo,
+        avatar: blank.avatar,
+        cardSections: blank.cardSections,
+        quickContact: blank.quickContact,
+      },
+    };
+    if (requestedSlug) payload.requestedSlug = requestedSlug;
+
+    const result = await callCardApi(payload);
+    if (result.status === 409) {
+      throw new Error(result.body.error || "名片 ID 已被使用");
+    }
+    if (!result.ok || !result.body.slug) {
+      throw new Error(result.body.error || "创建失败，请检查 Supabase 是否已执行 schema-multi.sql");
+    }
+    return result.body.slug;
   }
 
   function mergeQuickContact(qc) {
@@ -195,7 +336,7 @@
 
   function persistData() {
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+      localStorage.setItem(storageKey(), JSON.stringify(data));
     } catch (e) {
       console.error(e);
       showToast("保存失败：图片过大，请换较小的图片");
@@ -210,9 +351,18 @@
     "image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,video/webm,video/quicktime,.mov";
 
   function getSiteUrl() {
-    const custom = (defaults.siteUrl || "").trim();
-    if (custom) return custom;
-    return window.location.href.split("#")[0];
+    return buildCardUrl(currentSlug);
+  }
+
+  function isAnyModalOpen() {
+    return ["shareModal", "contactModal", "authModal", "editModal", "createModal"].some(function (id) {
+      const m = document.getElementById(id);
+      return m && !m.hidden;
+    });
+  }
+
+  function refreshBodyModalLock() {
+    document.body.classList.toggle("modal-open", isAnyModalOpen());
   }
 
   function buildQrImageUrl(url) {
@@ -360,9 +510,7 @@
 
   function closeShareModal() {
     shareModal.hidden = true;
-    if (contactModal.hidden && editModal.hidden && authModal.hidden) {
-      document.body.classList.remove("modal-open");
-    }
+    refreshBodyModalLock();
   }
 
   document.getElementById("shareBtn").addEventListener("click", openShareModal);
@@ -469,9 +617,7 @@
 
   function closeContactModal() {
     contactModal.hidden = true;
-    if (editModal.hidden && authModal.hidden && shareModal.hidden) {
-      document.body.classList.remove("modal-open");
-    }
+    refreshBodyModalLock();
   }
 
   document.getElementById("contactBtn").addEventListener("click", openContactModal);
@@ -523,11 +669,15 @@
   }
 
   function isEditAuthed() {
-    return sessionStorage.getItem(AUTH_SESSION_KEY) === "1";
+    return sessionStorage.getItem(authSessionKey()) === "1";
   }
 
-  function setEditAuthed() {
-    sessionStorage.setItem(AUTH_SESSION_KEY, "1");
+  function setEditAuthed(password) {
+    sessionStorage.setItem(authSessionKey(), "1");
+    if (password) {
+      sessionEditPassword = password;
+      sessionStorage.setItem(authPasswordKey(), password);
+    }
   }
 
   function openAuthModal() {
@@ -541,9 +691,7 @@
 
   function closeAuthModal() {
     authModal.hidden = true;
-    if (contactModal.hidden && editModal.hidden && shareModal.hidden) {
-      document.body.classList.remove("modal-open");
-    }
+    refreshBodyModalLock();
   }
 
   function requestEditAccess() {
@@ -554,19 +702,30 @@
     openAuthModal();
   }
 
-  function handleAuthSubmit(ev) {
+  async function handleAuthSubmit(ev) {
     ev.preventDefault();
     const pwd = authForm.password.value;
-    if (pwd === EDIT_PASSWORD) {
-      setEditAuthed();
-      closeAuthModal();
-      openEditModal();
-      showToast("验证成功");
-      return;
+    const submitBtn = authModal.querySelector('[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+
+    try {
+      const ok = await verifyEditPassword(pwd);
+      if (ok) {
+        setEditAuthed(pwd);
+        closeAuthModal();
+        openEditModal();
+        showToast("验证成功");
+        return;
+      }
+      showToast("密码错误，请重试");
+      authForm.password.value = "";
+      authForm.password.focus();
+    } catch (err) {
+      console.error(err);
+      showToast("验证失败，请检查网络后重试");
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
     }
-    showToast("密码错误，请重试");
-    authForm.password.value = "";
-    authForm.password.focus();
   }
 
   function setupEditEntry() {
@@ -630,9 +789,7 @@
 
   function closeEditModal() {
     editModal.hidden = true;
-    if (contactModal.hidden && authModal.hidden && shareModal.hidden) {
-      document.body.classList.remove("modal-open");
-    }
+    refreshBodyModalLock();
   }
 
   function basicInfoItemHtml(item, index) {
@@ -849,7 +1006,7 @@
 
   function resetToDefaults() {
     if (!confirm("确定恢复为默认示例数据？当前已保存的修改将被清除。")) return;
-    localStorage.removeItem(STORAGE_KEY);
+    localStorage.removeItem(storageKey());
     data = mergeWithDefaults(clone(defaults));
     data.updatedAt = Date.now();
     if (!data.basicInfo) data.basicInfo = mergeBasicInfo({});
@@ -901,11 +1058,105 @@
 
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape") return;
-    if (!shareModal.hidden) closeShareModal();
+    const createModalEl = document.getElementById("createModal");
+    if (createModalEl && !createModalEl.hidden) closeCreateModal();
+    else if (!shareModal.hidden) closeShareModal();
     else if (!contactModal.hidden) closeContactModal();
     else if (!authModal.hidden) closeAuthModal();
     else if (!editModal.hidden) closeEditModal();
   });
+
+  /* —— 制作我的名片 —— */
+
+  const createModal = document.getElementById("createModal");
+  const createForm = document.getElementById("createForm");
+
+  function openCreateModal() {
+    if (createForm) createForm.reset();
+    if (createModal) {
+      createModal.hidden = false;
+      document.body.classList.add("modal-open");
+      setTimeout(function () {
+        const pwd = createForm && createForm.password;
+        if (pwd) pwd.focus();
+      }, 50);
+    }
+  }
+
+  function closeCreateModal() {
+    if (createModal) {
+      createModal.hidden = true;
+      refreshBodyModalLock();
+    }
+  }
+
+  async function handleCreateSubmit(ev) {
+    ev.preventDefault();
+    const pwd = createForm.password.value;
+    const pwd2 = createForm.password2.value;
+    if (pwd.length < 4) {
+      showToast("密码至少 4 位");
+      return;
+    }
+    if (pwd !== pwd2) {
+      showToast("两次输入的密码不一致");
+      return;
+    }
+    const rawSlug = (createForm.requestedSlug.value || "").trim().toLowerCase();
+    if (rawSlug && !/^[a-z0-9][a-z0-9-]{2,31}$/.test(rawSlug)) {
+      showToast("名片 ID 仅支持小写字母、数字和连字符，3–32 位");
+      return;
+    }
+
+    const submitBtn = createModal.querySelector('[type="submit"]');
+    if (submitBtn) submitBtn.disabled = true;
+    try {
+      const slug = await createNewCard(pwd, rawSlug || undefined);
+      sessionStorage.setItem("person_web_edit_pwd_" + slug, pwd);
+      sessionStorage.setItem("person_web_edit_authed_" + slug, "1");
+      sessionStorage.setItem("person_web_open_edit_" + slug, "1");
+      showToast("名片创建成功，正在跳转…");
+      closeCreateModal();
+      setTimeout(function () {
+        window.location.href = buildCardUrl(slug);
+      }, 600);
+    } catch (err) {
+      console.error(err);
+      showToast(err.message || "创建失败");
+    } finally {
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  }
+
+  function updateCreateCardUi() {
+    const shareHint = document.getElementById("shareSlugHint");
+    if (shareHint) {
+      if (currentSlug !== DEFAULT_SLUG) {
+        shareHint.textContent = "你的名片专属链接：" + buildCardUrl(currentSlug);
+        shareHint.hidden = false;
+      } else {
+        shareHint.hidden = true;
+      }
+    }
+    const hint = document.getElementById("editEntryHint");
+    if (hint) {
+      if (currentSlug === DEFAULT_SLUG) {
+        hint.textContent = "编辑保存后同步到云端，所有设备打开均可看到最新内容。";
+      } else {
+        hint.textContent = "双击标题或连点下方 3 次可编辑。请妥善保管你的编辑密码。";
+      }
+    }
+  }
+
+  if (createForm) createForm.addEventListener("submit", handleCreateSubmit);
+  document.querySelectorAll("[data-open-create]").forEach(function (el) {
+    el.addEventListener("click", openCreateModal);
+  });
+  if (createModal) {
+    createModal.querySelectorAll("[data-close-create]").forEach(function (el) {
+      el.addEventListener("click", closeCreateModal);
+    });
+  }
 
   /* —— 保存为图片 —— */
 
@@ -970,10 +1221,19 @@
   }
 
   async function initApp() {
-    data = await loadData();
+    currentSlug = getCardSlugFromUrl();
+    data = await loadData(currentSlug);
     renderCard();
     renderSiteQrs();
+    updateCreateCardUi();
     document.getElementById("saveBtn").addEventListener("click", saveAsImage);
+
+    const openEditKey = "person_web_open_edit_" + currentSlug;
+    if (sessionStorage.getItem(openEditKey) === "1") {
+      sessionStorage.removeItem(openEditKey);
+      openEditModal();
+      showToast("名片已创建，请开始编辑你的内容");
+    }
   }
 
   initApp();
