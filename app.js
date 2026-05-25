@@ -40,6 +40,56 @@
     return base + "?card=" + encodeURIComponent(slug);
   }
 
+  const MY_CARDS_KEY = "person_web_my_cards";
+
+  function pendingCloudKey(slug) {
+    return "person_web_pending_cloud_" + (slug || currentSlug);
+  }
+
+  function generateLocalSlug() {
+    const chars = "abcdefghijklmnopqrstuvwxyz0123456789";
+    let s = "";
+    for (let i = 0; i < 8; i++) {
+      s += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return s;
+  }
+
+  function needsCloudCreate(slug) {
+    return localStorage.getItem(pendingCloudKey(slug || currentSlug)) === "1";
+  }
+
+  function markPendingCloudCreate(slug) {
+    localStorage.setItem(pendingCloudKey(slug), "1");
+  }
+
+  function clearPendingCloudCreate(slug) {
+    localStorage.removeItem(pendingCloudKey(slug || currentSlug));
+  }
+
+  function readMyCards() {
+    try {
+      const raw = localStorage.getItem(MY_CARDS_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) {
+      return [];
+    }
+  }
+
+  function registerMyCard(slug, url) {
+    const list = readMyCards().filter(function (c) {
+      return c.slug !== slug;
+    });
+    list.unshift({ slug: slug, url: url, createdAt: Date.now() });
+    try {
+      localStorage.setItem(MY_CARDS_KEY, JSON.stringify(list.slice(0, 30)));
+    } catch (e) {
+      console.warn("保存我的名片列表失败", e);
+    }
+  }
+
+  let pendingSuccessSlug = "";
+
   let data = null;
 
   function getCloudSync() {
@@ -211,6 +261,10 @@
   }
 
   async function verifyEditPassword(password) {
+    if (needsCloudCreate(currentSlug)) {
+      const stored = sessionStorage.getItem(authPasswordKey()) || sessionEditPassword;
+      return password === stored;
+    }
     if (currentSlug === DEFAULT_SLUG && password === LEGACY_EDIT_PASSWORD) {
       return true;
     }
@@ -238,43 +292,35 @@
     if (result.status === 401) {
       throw new Error("密码错误，请重新验证后再保存");
     }
+    if (result.status === 429) {
+      throw new Error(result.body.error || "操作过于频繁，请稍后再试");
+    }
     if (!result.ok) {
       throw new Error("云端同步失败：" + (result.body.error || result.status));
     }
+
+    if (needsCloudCreate(currentSlug)) {
+      clearPendingCloudCreate(currentSlug);
+      registerMyCard(currentSlug, buildCardUrl(currentSlug));
+    }
+
     return { ok: true };
   }
 
-  async function createNewCard(password, requestedSlug) {
+  async function checkSlugAvailable(slug) {
+    const result = await callCardApi({ action: "check-slug", slug: slug });
+    if (!result.ok) {
+      throw new Error(result.body.error || "检查名片 ID 失败");
+    }
+    return result.body.available === true;
+  }
+
+  function buildBlankCardData() {
     const blank = mergeWithDefaults(clone(defaults));
     blank.updatedAt = Date.now();
-    if (blank.basicInfo && blank.basicInfo[0]) {
-      blank.basicInfo[0].value = "我的姓名";
-    }
-    if (blank.basicInfo && blank.basicInfo[1]) {
-      blank.basicInfo[1].value = "我的职位";
-    }
-
-    const payload = {
-      action: "create",
-      password: password,
-      data: {
-        updatedAt: blank.updatedAt,
-        basicInfo: blank.basicInfo,
-        avatar: blank.avatar,
-        cardSections: blank.cardSections,
-        quickContact: blank.quickContact,
-      },
-    };
-    if (requestedSlug) payload.requestedSlug = requestedSlug;
-
-    const result = await callCardApi(payload);
-    if (result.status === 409) {
-      throw new Error(result.body.error || "名片 ID 已被使用");
-    }
-    if (!result.ok || !result.body.slug) {
-      throw new Error(result.body.error || "创建失败，请检查 Supabase 是否已执行 schema-multi.sql");
-    }
-    return result.body.slug;
+    if (blank.basicInfo && blank.basicInfo[0]) blank.basicInfo[0].value = "我的姓名";
+    if (blank.basicInfo && blank.basicInfo[1]) blank.basicInfo[1].value = "我的职位";
+    return blank;
   }
 
   function mergeQuickContact(qc) {
@@ -355,7 +401,15 @@
   }
 
   function isAnyModalOpen() {
-    return ["shareModal", "contactModal", "authModal", "editModal", "createModal"].some(function (id) {
+    return [
+      "shareModal",
+      "contactModal",
+      "authModal",
+      "editModal",
+      "createModal",
+      "createSuccessModal",
+      "recoverModal",
+    ].some(function (id) {
       const m = document.getElementById(id);
       return m && !m.hidden;
     });
@@ -895,10 +949,17 @@
       saveBtn.textContent = "同步中…";
     }
 
+    const wasPendingCloud = needsCloudCreate(currentSlug);
+
     syncToCloud()
       .then(function (result) {
         if (result.ok) {
-          showToast("已保存并同步，所有设备刷新即可看到");
+          if (wasPendingCloud) {
+            showToast("首次保存成功，名片已同步到云端");
+            updateCreateCardUi();
+          } else {
+            showToast("已保存并同步，所有设备刷新即可看到");
+          }
         } else {
           showToast("已保存到本机。请填写 cloud-config.js 完成云端同步");
         }
@@ -1059,7 +1120,11 @@
   document.addEventListener("keydown", function (ev) {
     if (ev.key !== "Escape") return;
     const createModalEl = document.getElementById("createModal");
-    if (createModalEl && !createModalEl.hidden) closeCreateModal();
+    const successModalEl = document.getElementById("createSuccessModal");
+    const recoverModalEl = document.getElementById("recoverModal");
+    if (successModalEl && !successModalEl.hidden) closeCreateSuccessModal();
+    else if (recoverModalEl && !recoverModalEl.hidden) closeRecoverModal();
+    else if (createModalEl && !createModalEl.hidden) closeCreateModal();
     else if (!shareModal.hidden) closeShareModal();
     else if (!contactModal.hidden) closeContactModal();
     else if (!authModal.hidden) closeAuthModal();
@@ -1070,6 +1135,9 @@
 
   const createModal = document.getElementById("createModal");
   const createForm = document.getElementById("createForm");
+  const createSuccessModal = document.getElementById("createSuccessModal");
+  const recoverModal = document.getElementById("recoverModal");
+  const recoverForm = document.getElementById("recoverForm");
 
   function openCreateModal() {
     if (createForm) createForm.reset();
@@ -1111,21 +1179,126 @@
     const submitBtn = createModal.querySelector('[type="submit"]');
     if (submitBtn) submitBtn.disabled = true;
     try {
-      const slug = await createNewCard(pwd, rawSlug || undefined);
+      let slug = rawSlug || generateLocalSlug();
+      if (rawSlug) {
+        const available = await checkSlugAvailable(rawSlug);
+        if (!available) {
+          showToast("该名片 ID 已被使用，请换一个");
+          return;
+        }
+      }
+
+      const blank = buildBlankCardData();
+      markPendingCloudCreate(slug);
+      localStorage.setItem("person_web_card_" + slug, JSON.stringify(blank));
       sessionStorage.setItem("person_web_edit_pwd_" + slug, pwd);
       sessionStorage.setItem("person_web_edit_authed_" + slug, "1");
-      sessionStorage.setItem("person_web_open_edit_" + slug, "1");
-      showToast("名片创建成功，正在跳转…");
+
+      const cardUrl = buildCardUrl(slug);
+      registerMyCard(slug, cardUrl);
+      pendingSuccessSlug = slug;
+
       closeCreateModal();
-      setTimeout(function () {
-        window.location.href = buildCardUrl(slug);
-      }, 600);
+      openCreateSuccessModal(slug, cardUrl);
     } catch (err) {
       console.error(err);
       showToast(err.message || "创建失败");
     } finally {
       if (submitBtn) submitBtn.disabled = false;
     }
+  }
+
+  function openCreateSuccessModal(slug, url) {
+    pendingSuccessSlug = slug;
+    const urlEl = document.getElementById("createSuccessUrl");
+    const qrEl = document.getElementById("createSuccessQr");
+    if (urlEl) urlEl.textContent = url;
+    if (qrEl) qrEl.src = buildQrImageUrl(url);
+    if (createSuccessModal) {
+      createSuccessModal.hidden = false;
+      document.body.classList.add("modal-open");
+    }
+  }
+
+  function closeCreateSuccessModal() {
+    if (createSuccessModal) {
+      createSuccessModal.hidden = true;
+      refreshBodyModalLock();
+    }
+  }
+
+  function goToPendingCard(editAfter) {
+    if (!pendingSuccessSlug) return;
+    sessionStorage.setItem("person_web_edit_pwd_" + pendingSuccessSlug, sessionStorage.getItem("person_web_edit_pwd_" + pendingSuccessSlug) || "");
+    sessionStorage.setItem("person_web_edit_authed_" + pendingSuccessSlug, "1");
+    if (editAfter) {
+      sessionStorage.setItem("person_web_open_edit_" + pendingSuccessSlug, "1");
+    }
+    window.location.href = buildCardUrl(pendingSuccessSlug);
+  }
+
+  function renderMyCardsList() {
+    const listEl = document.getElementById("myCardsList");
+    if (!listEl) return;
+    const cards = readMyCards();
+    if (!cards.length) {
+      listEl.innerHTML = '<p class="form-hint my-cards-empty">本浏览器暂无已创建的名片记录</p>';
+      return;
+    }
+    listEl.innerHTML = cards
+      .map(function (c) {
+        const url = c.url || buildCardUrl(c.slug);
+        const date = c.createdAt ? new Date(c.createdAt).toLocaleDateString("zh-CN") : "";
+        return (
+          '<div class="my-card-item">' +
+          '<div class="my-card-item-main">' +
+          '<strong>' +
+          escapeHtml(c.slug) +
+          "</strong>" +
+          (date ? '<span class="my-card-item-date">' + escapeHtml(date) + "</span>" : "") +
+          '<p class="my-card-item-url">' +
+          escapeHtml(url) +
+          "</p>" +
+          "</div>" +
+          '<button type="button" class="btn-ghost btn-sm" data-open-my-card="' +
+          escapeAttr(c.slug) +
+          '">打开</button>' +
+          "</div>"
+        );
+      })
+      .join("");
+  }
+
+  function openRecoverModal() {
+    renderMyCardsList();
+    if (recoverForm) recoverForm.reset();
+    if (recoverModal) {
+      recoverModal.hidden = false;
+      document.body.classList.add("modal-open");
+    }
+  }
+
+  function closeRecoverModal() {
+    if (recoverModal) {
+      recoverModal.hidden = true;
+      refreshBodyModalLock();
+    }
+  }
+
+  function openCardBySlug(slug) {
+    const raw = String(slug || "")
+      .trim()
+      .toLowerCase();
+    if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(raw)) {
+      showToast("无效的名片 ID");
+      return;
+    }
+    window.location.href = buildCardUrl(raw);
+  }
+
+  function handleRecoverSubmit(ev) {
+    ev.preventDefault();
+    openCardBySlug(recoverForm.slug.value);
   }
 
   function updateCreateCardUi() {
@@ -1141,9 +1314,12 @@
     const hint = document.getElementById("editEntryHint");
     if (hint) {
       if (currentSlug === DEFAULT_SLUG) {
-        hint.textContent = "编辑保存后同步到云端，所有设备打开均可看到最新内容。";
+        hint.innerHTML =
+          '编辑保存后同步到云端，所有设备打开均可看到最新内容。站点管理请访问 <a href="admin.html" class="hint-link">管理后台</a>。';
+      } else if (needsCloudCreate(currentSlug)) {
+        hint.textContent = "名片尚未保存到云端。编辑完成后请点击「保存修改」，并务必保存专属链接。";
       } else {
-        hint.textContent = "双击标题或连点下方 3 次可编辑。请妥善保管你的编辑密码。";
+        hint.textContent = "双击标题或连点下方 3 次可编辑。请妥善保管你的编辑密码与专属链接。";
       }
     }
   }
@@ -1152,9 +1328,40 @@
   document.querySelectorAll("[data-open-create]").forEach(function (el) {
     el.addEventListener("click", openCreateModal);
   });
+  document.querySelectorAll("[data-open-recover]").forEach(function (el) {
+    el.addEventListener("click", openRecoverModal);
+  });
   if (createModal) {
     createModal.querySelectorAll("[data-close-create]").forEach(function (el) {
       el.addEventListener("click", closeCreateModal);
+    });
+  }
+  if (createSuccessModal) {
+    createSuccessModal.querySelectorAll("[data-close-success]").forEach(function (el) {
+      el.addEventListener("click", closeCreateSuccessModal);
+    });
+  }
+  const copyCreateSuccessUrlBtn = document.getElementById("copyCreateSuccessUrlBtn");
+  if (copyCreateSuccessUrlBtn) {
+    copyCreateSuccessUrlBtn.addEventListener("click", function () {
+      const url = document.getElementById("createSuccessUrl");
+      copyText(url ? url.textContent : buildCardUrl(pendingSuccessSlug), "专属链接已复制").catch(function () {});
+    });
+  }
+  const createSuccessEditBtn = document.getElementById("createSuccessEditBtn");
+  if (createSuccessEditBtn) {
+    createSuccessEditBtn.addEventListener("click", function () {
+      goToPendingCard(true);
+    });
+  }
+  if (recoverForm) recoverForm.addEventListener("submit", handleRecoverSubmit);
+  if (recoverModal) {
+    recoverModal.querySelectorAll("[data-close-recover]").forEach(function (el) {
+      el.addEventListener("click", closeRecoverModal);
+    });
+    recoverModal.addEventListener("click", function (ev) {
+      const btn = ev.target.closest("[data-open-my-card]");
+      if (btn) openCardBySlug(btn.getAttribute("data-open-my-card"));
     });
   }
 

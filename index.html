@@ -15,12 +15,6 @@
     <header class="page-header">
       <h1 id="pageTitle" class="page-title">个人名片</h1>
       <div class="header-actions">
-        <button type="button" id="createCardBtnHeader" class="btn-secondary" data-open-create aria-label="制作我的名片">
-          <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
-            <path d="M12 5v14M5 12h14"/>
-          </svg>
-          <span class="btn-label">制作名片</span>
-        </button>
         <button type="button" id="shareBtn" class="btn-secondary" aria-label="扫码访问名片">
           <svg class="btn-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true">
             <rect x="3" y="3" width="7" height="7"/>
@@ -74,8 +68,11 @@
 
     <section class="create-card-banner" id="createCardBanner" aria-label="制作名片">
       <div class="create-card-banner-inner">
-        <p class="create-card-banner-text">喜欢这张名片？你也可以免费制作属于自己的在线名片，生成专属链接分享给朋友。</p>
-        <button type="button" id="createCardBtn" class="btn-save" data-open-create>制作我的名片</button>
+        <p class="create-card-banner-text">喜欢这张名片？你也可以免费制作属于自己的在线名片。名片在<strong>首次保存</strong>后才会写入云端，避免无效占用。</p>
+        <div class="create-card-banner-actions">
+          <button type="button" id="createCardBtn" class="btn-save" data-open-create>制作我的名片</button>
+          <button type="button" id="recoverCardBtn" class="btn-ghost btn-sm" data-open-recover>找回我的名片</button>
+        </div>
       </div>
     </section>
 
@@ -265,7 +262,7 @@
         <button type="button" class="modal-close" data-close-create aria-label="关闭">×</button>
       </header>
       <form id="createForm" class="modal-body">
-        <p class="form-hint">免费创建你的在线名片，获得专属分享链接。请设置编辑密码（至少 4 位），用于日后修改名片内容。</p>
+        <p class="form-hint">设置编辑密码（至少 4 位）。名片先保存在本机，<strong>首次点击「保存修改」</strong>后才会写入云端，避免无效占用。</p>
         <label class="form-field">
           <span>编辑密码</span>
           <input type="password" name="password" autocomplete="new-password" minlength="4" required placeholder="至少 4 位" />
@@ -278,11 +275,59 @@
           <span>名片 ID（选填）</span>
           <input type="text" name="requestedSlug" pattern="[a-z0-9][a-z0-9-]{2,31}" placeholder="如 zhangsan，留空则自动生成" autocapitalize="off" spellcheck="false" />
         </label>
-        <p class="form-hint">名片 ID 用于链接地址，仅支持小写字母、数字和连字符。创建后可通过「扫码访问」复制专属链接。</p>
+        <p class="form-hint">名片 ID 用于链接地址。创建后请务必保存专属链接；同一浏览器可通过「找回我的名片」再次打开。</p>
       </form>
       <footer class="modal-footer">
         <button type="button" class="btn-ghost" data-close-create>取消</button>
         <button type="submit" form="createForm" class="btn-save">创建名片</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="createSuccessModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="createSuccessTitle" hidden>
+    <div class="modal-backdrop" data-close-success></div>
+    <div class="modal-panel modal-panel--compact">
+      <header class="modal-header">
+        <h2 id="createSuccessTitle" class="modal-title">名片已创建</h2>
+      </header>
+      <div class="modal-body">
+        <p class="form-hint form-hint--warn">请务必复制并保存下方链接！关闭后只能通过「找回我的名片」或记得名片 ID 才能再次访问。</p>
+        <div class="success-link-box">
+          <p id="createSuccessUrl" class="share-url-text"></p>
+          <button type="button" id="copyCreateSuccessUrlBtn" class="btn-ghost btn-block">复制专属链接</button>
+        </div>
+        <div class="share-qr-wrap share-qr-wrap--sm">
+          <img id="createSuccessQr" class="share-qr-img" src="" alt="名片链接二维码" />
+        </div>
+        <p class="form-hint">编辑密码已保存在本浏览器。首次保存后名片才会同步到云端。</p>
+      </div>
+      <footer class="modal-footer">
+        <button type="button" class="btn-ghost" data-close-success>稍后编辑</button>
+        <button type="button" id="createSuccessEditBtn" class="btn-save">开始编辑</button>
+      </footer>
+    </div>
+  </div>
+
+  <div id="recoverModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="recoverModalTitle" hidden>
+    <div class="modal-backdrop" data-close-recover></div>
+    <div class="modal-panel modal-panel--compact">
+      <header class="modal-header">
+        <h2 id="recoverModalTitle" class="modal-title">找回我的名片</h2>
+        <button type="button" class="modal-close" data-close-recover aria-label="关闭">×</button>
+      </header>
+      <div class="modal-body">
+        <p class="form-hint">本浏览器曾创建的名片会显示在下方。若记得名片 ID，也可手动输入打开。</p>
+        <div id="myCardsList" class="my-cards-list"></div>
+        <form id="recoverForm" class="recover-form">
+          <label class="form-field">
+            <span>名片 ID</span>
+            <input type="text" name="slug" placeholder="如 zhangsan 或 abc12345" autocapitalize="off" spellcheck="false" />
+          </label>
+          <button type="submit" class="btn-save btn-block">打开名片</button>
+        </form>
+      </div>
+      <footer class="modal-footer modal-footer--single">
+        <button type="button" class="btn-ghost" data-close-recover>关闭</button>
       </footer>
     </div>
   </div>

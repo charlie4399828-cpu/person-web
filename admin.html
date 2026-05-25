@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex, nofollow" />
+  <title>名片管理后台</title>
+  <link rel="stylesheet" href="styles.css" />
+  <style>
+    .admin-page { max-width: 960px; margin: 0 auto; padding: 1.5rem 1rem 3rem; }
+    .admin-header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; margin-bottom: 1.5rem; }
+    .admin-title { margin: 0; font-size: 1.25rem; }
+    .admin-stats { display: grid; grid-template-columns: repeat(2, 1fr); gap: 0.75rem; margin-bottom: 1.5rem; }
+    @media (min-width: 640px) { .admin-stats { grid-template-columns: repeat(4, 1fr); } }
+    .admin-stat { padding: 1rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 12px; }
+    .admin-stat-label { font-size: 0.75rem; color: var(--text-muted); margin-bottom: 0.25rem; }
+    .admin-stat-value { font-size: 1.5rem; font-weight: 700; color: var(--accent); }
+    .admin-toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+    .admin-table-wrap { overflow-x: auto; border: 1px solid var(--border); border-radius: 12px; }
+    .admin-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+    .admin-table th, .admin-table td { padding: 0.65rem 0.75rem; text-align: left; border-bottom: 1px solid var(--border); }
+    .admin-table th { background: rgba(255,255,255,0.04); color: var(--text-muted); font-weight: 500; }
+    .admin-table tr:last-child td { border-bottom: none; }
+    .admin-badge { display: inline-block; padding: 0.15rem 0.45rem; border-radius: 999px; font-size: 0.6875rem; }
+    .admin-badge--warn { background: rgba(251,191,36,0.15); color: #fbbf24; }
+    .admin-badge--ok { background: rgba(34,197,94,0.15); color: #22c55e; }
+    .admin-login { max-width: 360px; margin: 4rem auto; padding: 1.5rem; background: var(--bg-card); border: 1px solid var(--border); border-radius: 16px; }
+    .admin-login h1 { margin: 0 0 1rem; font-size: 1.125rem; }
+    .admin-empty { text-align: center; color: var(--text-muted); padding: 2rem; }
+    .admin-back { font-size: 0.875rem; color: var(--text-muted); text-decoration: none; }
+    .admin-back:hover { color: var(--accent); }
+  </style>
+</head>
+<body>
+  <div class="admin-page">
+    <a href="./" class="admin-back">← 返回名片页</a>
+
+    <div id="adminLogin" class="admin-login">
+      <h1>名片管理后台</h1>
+      <p class="form-hint">请输入管理员密码（Supabase 中的 CARD_ADMIN_PASSWORD，未设置则与 CARD_EDIT_PASSWORD 相同）</p>
+      <form id="adminLoginForm">
+        <label class="form-field">
+          <span>管理员密码</span>
+          <input type="password" name="password" required autocomplete="current-password" />
+        </label>
+        <button type="submit" class="btn-save btn-block">登录</button>
+      </form>
+    </div>
+
+    <div id="adminPanel" hidden>
+      <header class="admin-header">
+        <h1 class="admin-title">名片管理</h1>
+        <button type="button" id="adminLogoutBtn" class="btn-ghost btn-sm">退出登录</button>
+      </header>
+
+      <div class="admin-stats" id="adminStats"></div>
+
+      <div class="admin-toolbar">
+        <button type="button" id="adminRefreshBtn" class="btn-secondary btn-sm">刷新列表</button>
+        <button type="button" id="adminCleanupBtn" class="btn-ghost btn-sm">清理 7 天未保存的空白名片</button>
+      </div>
+
+      <div class="admin-table-wrap">
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>名片 ID</th>
+              <th>保存次数</th>
+              <th>创建时间</th>
+              <th>更新时间</th>
+              <th>操作</th>
+            </tr>
+          </thead>
+          <tbody id="adminTableBody"></tbody>
+        </table>
+      </div>
+      <p id="adminStatus" class="form-hint" style="margin-top: 0.75rem;"></p>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+  <script src="cloud-config.js"></script>
+  <script src="data.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
