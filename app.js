@@ -1357,10 +1357,15 @@
     const raw = String(slug || "")
       .trim()
       .toLowerCase();
+    if (!raw) {
+      showToast("请输入名片 ID");
+      return;
+    }
     if (!/^[a-z0-9][a-z0-9-]{2,31}$/.test(raw)) {
       showToast("无效的名片 ID");
       return;
     }
+    closeRecoverModal();
     window.location.href = buildCardUrl(raw);
   }
 
@@ -1435,7 +1440,9 @@
     });
     recoverModal.addEventListener("click", function (ev) {
       const btn = ev.target.closest("[data-open-my-card]");
-      if (btn) openCardBySlug(btn.getAttribute("data-open-my-card"));
+      if (!btn) return;
+      ev.preventDefault();
+      openCardBySlug(btn.getAttribute("data-open-my-card"));
     });
   }
 

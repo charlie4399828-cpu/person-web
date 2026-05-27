@@ -94,6 +94,19 @@
       .replace(/"/g, "&quot;");
   }
 
+  function escapeAttr(s) {
+    return escapeHtml(s).replace(/'/g, "&#39;");
+  }
+
+  function getCardPageUrl(slug) {
+    const custom = (defaults.siteUrl || "").trim();
+    const base = custom
+      ? custom.split("?")[0].replace(/\/$/, "") + "/"
+      : window.location.origin + window.location.pathname.replace(/\/admin(\/.*)?\.html.*$/, "/");
+    if (!slug || slug === "default") return base;
+    return base + "?card=" + encodeURIComponent(slug);
+  }
+
   function renderStats(stats) {
     const el = document.getElementById("adminStats");
     if (!el || !stats) return;
@@ -137,11 +150,16 @@
           card.saveCount > 0
             ? '<span class="admin-badge admin-badge--ok">已保存</span>'
             : '<span class="admin-badge admin-badge--warn">未保存</span>';
+        const viewBtn =
+          '<a href="' +
+          escapeAttr(getCardPageUrl(card.slug)) +
+          '" target="_blank" rel="noopener noreferrer" class="btn-ghost btn-sm admin-view-link">查看名片</a>';
         const deleteBtn = card.isDefault
-          ? "—"
+          ? ""
           : '<button type="button" class="btn-ghost btn-sm" data-delete-slug="' +
             escapeHtml(card.slug) +
             '">删除</button>';
+        const actions = card.isDefault ? viewBtn : viewBtn + " " + deleteBtn;
         return (
           "<tr>" +
           "<td><strong>" +
@@ -161,8 +179,8 @@
           "<td>" +
           escapeHtml(formatTime(card.createdAt)) +
           "</td>" +
-          "<td>" +
-          deleteBtn +
+          '<td class="admin-actions">' +
+          actions +
           "</td>" +
           "</tr>"
         );
