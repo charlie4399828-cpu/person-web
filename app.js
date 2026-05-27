@@ -445,9 +445,9 @@
 
   const FALLBACK_AVATAR = "https://api.dicebear.com/7.x/avataaars/svg?seed=profile";
   const MAX_IMAGE_BYTES = 800 * 1024;
-  const MAX_VIDEO_BYTES = 8 * 1024 * 1024;
+  const MAX_VIDEO_BYTES = 5 * 1024 * 1024;
   const PORTFOLIO_MEDIA_ACCEPT =
-    "image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,video/webm,video/quicktime,.mov";
+    "image/jpeg,image/png,image/gif,image/webp,image/svg+xml,video/mp4,video/webm,video/quicktime,.mov,.mp4,.webm";
 
   function getSiteUrl() {
     return buildCardUrl(currentSlug);
@@ -1098,19 +1098,28 @@
   }
 
   function processPortfolioMediaFile(file) {
-    if (!file) return Promise.reject(new Error("no file"));
-    if (file.type.startsWith("video/")) {
+    if (!file) return Promise.reject(new Error("未选择文件"));
+
+    const name = (file.name || "").toLowerCase();
+    const isVideo =
+      (file.type && file.type.startsWith("video/")) || /\.(mp4|webm|mov|m4v)(\?.*)?$/.test(name);
+    const isImage =
+      (file.type && file.type.startsWith("image/")) || /\.(jpe?g|png|gif|webp|svg)(\?.*)?$/.test(name);
+
+    if (isVideo) {
       if (file.size > MAX_VIDEO_BYTES) {
-        return Promise.reject(new Error("video too large"));
+        return Promise.reject(
+          new Error("本地视频不能超过 5MB，请使用下方「视频外链」粘贴网盘或 MP4 直链")
+        );
       }
       return readFileAsDataURL(file).then(function (dataUrl) {
         return { dataUrl: dataUrl, mediaType: "video" };
       });
     }
-    if (file.type.startsWith("image/")) {
+    if (isImage) {
       if (file.type === "image/svg+xml") {
         if (file.size > 2 * 1024 * 1024) {
-          return Promise.reject(new Error("svg too large"));
+          return Promise.reject(new Error("SVG 不能超过 2MB"));
         }
         return readFileAsDataURL(file).then(function (dataUrl) {
           return { dataUrl: dataUrl, mediaType: "image" };
@@ -1120,7 +1129,7 @@
         return { dataUrl: dataUrl, mediaType: "image" };
       });
     }
-    return Promise.reject(new Error("unsupported"));
+    return Promise.reject(new Error("请使用 JPG/PNG/GIF/WebP/SVG 或 MP4/WebM/MOV，大视频请用外链"));
   }
 
   if (window.CardSections) {

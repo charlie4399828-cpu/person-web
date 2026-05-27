@@ -63,9 +63,60 @@
     }
     if (kind === "tags") return { label: "", value: "" };
     if (kind === "portfolio") {
-      return { title: "", desc: "", link: "", mediaSrc: "", mediaType: "image" };
+      return { title: "", desc: "", link: "", mediaSrc: "", mediaUrl: "", mediaType: "image" };
     }
     return {};
+  }
+
+  function isVideoUrl(url) {
+    const u = String(url || "").trim().toLowerCase();
+    if (!u) return false;
+    if (/\.(mp4|webm|mov|m4v|ogg)(\?|#|$)/i.test(u)) return true;
+    if (u.includes("bilibili.com/video") || u.includes("youtu.be") || u.includes("youtube.com/watch")) {
+      return true;
+    }
+    return false;
+  }
+
+  function portfolioMediaHtml(item, escapeAttr) {
+    const external = String(item.mediaUrl || "").trim();
+    const local = String(item.mediaSrc || "").trim();
+
+    if (external) {
+      const bvid = external.match(/BV[\da-zA-Z]+/);
+      if (bvid && external.includes("bilibili.com")) {
+        return (
+          '<iframe class="portfolio-embed" allowfullscreen loading="lazy" src="https://player.bilibili.com/player.html?bvid=' +
+          escapeAttr(bvid[0]) +
+          '&high_quality=1&autoplay=0"></iframe>'
+        );
+      }
+      if (isVideoUrl(external)) {
+        return (
+          '<video class="portfolio-media" src="' +
+          escapeAttr(external) +
+          '" controls playsinline preload="metadata"></video>'
+        );
+      }
+      return (
+        '<a class="portfolio-external-link" href="' +
+        escapeAttr(external) +
+        '" target="_blank" rel="noopener noreferrer">打开外部媒体 ↗</a>'
+      );
+    }
+
+    if (local) {
+      if (item.mediaType === "video") {
+        return (
+          '<video class="portfolio-media" src="' +
+          escapeAttr(local) +
+          '" controls playsinline preload="metadata"></video>'
+        );
+      }
+      return '<img class="portfolio-media" src="' + escapeAttr(local) + '" alt="作品预览" />';
+    }
+
+    return "";
   }
 
   function normalizeSection(section) {
@@ -110,6 +161,7 @@
             desc: item.desc ?? "",
             link: item.link ?? "",
             mediaSrc: item.mediaSrc ?? "",
+            mediaUrl: item.mediaUrl ?? "",
             mediaType: item.mediaType === "video" ? "video" : "image",
           };
         }
@@ -227,7 +279,7 @@
     }
     if (kind === "tags") return tagsItemHasContent(item);
     if (kind === "portfolio") {
-      return !!(item.title || item.desc || item.link || item.mediaSrc);
+      return !!(item.title || item.desc || item.link || item.mediaSrc || item.mediaUrl);
     }
     return false;
   }
@@ -395,22 +447,7 @@
         '<div class="portfolio-grid">' +
         items
           .map(function (p) {
-            let mediaHtml = "";
-            if (p.mediaSrc) {
-              if (p.mediaType === "video") {
-                mediaHtml =
-                  '<video class="portfolio-media" src="' +
-                  escapeAttr(p.mediaSrc) +
-                  '" controls playsinline preload="metadata"></video>';
-              } else {
-                mediaHtml =
-                  '<img class="portfolio-media" src="' +
-                  escapeAttr(p.mediaSrc) +
-                  '" alt="' +
-                  escapeAttr(p.title || "作品") +
-                  '" />';
-              }
-            }
+            const mediaHtml = portfolioMediaHtml(p, escapeAttr);
             const linkHtml = p.link
               ? '<a class="portfolio-link" href="' +
                 escapeAttr(p.link) +
@@ -449,16 +486,10 @@
     );
   }
 
-  function portfolioPreviewInnerHtml(src, mediaType, escapeAttr) {
-    if (!src) return '<span class="portfolio-preview-empty">未上传图片或视频</span>';
-    if (mediaType === "video") {
-      return (
-        '<video class="portfolio-media" src="' +
-        escapeAttr(src) +
-        '" controls playsinline preload="metadata"></video>'
-      );
-    }
-    return '<img class="portfolio-media" src="' + escapeAttr(src) + '" alt="作品预览" />';
+  function portfolioPreviewInnerHtml(item, escapeAttr) {
+    const html = portfolioMediaHtml(item, escapeAttr);
+    if (html) return html;
+    return '<span class="portfolio-preview-empty">未上传图片或视频</span>';
   }
 
   function sectionItemHtml(kind, item, index, helpers) {
@@ -600,12 +631,17 @@
         '<label class="form-field"><span>描述（选填）</span><textarea data-field="desc" rows="2">' +
         escapeHtml(item.desc) +
         "</textarea></label>" +
-        '<label class="form-field"><span>链接（选填）</span><input type="url" data-field="link" value="' +
+        '<label class="form-field"><span>文档 / 项目链接（选填）</span><input type="url" data-field="link" value="' +
         escapeAttr(item.link || "") +
-        '" /></label>' +
-        '<span class="form-field-label">图片 / 视频（选填）</span>' +
+        '" placeholder="https://..." /></label>' +
+        '<label class="form-field"><span>视频外链（推荐，适合 5MB 以上大视频）</span>' +
+        '<input type="url" data-field="mediaUrl" value="' +
+        escapeAttr(item.mediaUrl || "") +
+        '" placeholder="MP4 直链、B站视频页链接等" /></label>' +
+        '<p class="form-hint">大视频请上传到 B站 / 云盘 / 对象存储，复制链接填在这里。本地仅适合 5MB 以内短视频。</p>' +
+        '<span class="form-field-label">本地图片 / 小视频（≤5MB）</span>' +
         '<div class="portfolio-preview-wrap" data-portfolio-preview>' +
-        portfolioPreviewInnerHtml(item.mediaSrc, mediaType, escapeAttr) +
+        portfolioPreviewInnerHtml(item, escapeAttr) +
         "</div>" +
         '<input type="hidden" data-field="mediaSrc" value="' +
         escapeAttr(item.mediaSrc || "") +
@@ -617,7 +653,7 @@
         PORTFOLIO_MEDIA_ACCEPT +
         '" hidden />' +
         '<div class="portfolio-upload-actions">' +
-        '<button type="button" class="btn-add btn-sm" data-portfolio-upload>选择图片 / 视频</button>' +
+        '<button type="button" class="btn-add btn-sm" data-portfolio-upload>选择本地文件</button>' +
         '<button type="button" class="btn-ghost btn-sm" data-portfolio-clear-media>清除媒体</button>' +
         "</div></div>"
       );
@@ -759,10 +795,11 @@
       const desc = el.querySelector('[data-field="desc"]').value.trim();
       const link = el.querySelector('[data-field="link"]').value.trim();
       const mediaSrc = el.querySelector('[data-field="mediaSrc"]').value.trim();
+      const mediaUrl = el.querySelector('[data-field="mediaUrl"]').value.trim();
       const mediaTypeRaw = el.querySelector('[data-field="mediaType"]').value.trim();
       const mediaType = mediaTypeRaw === "video" ? "video" : "image";
-      if (!title && !desc && !link && !mediaSrc) return null;
-      return { title, desc, link, mediaSrc, mediaType };
+      if (!title && !desc && !link && !mediaSrc && !mediaUrl) return null;
+      return { title, desc, link, mediaSrc, mediaUrl, mediaType };
     }
     return null;
   }
@@ -798,10 +835,34 @@
     wrap.innerHTML = imagePreviewHtml(src, "配图", escapeAttrFn);
   }
 
-  function setPortfolioItemPreview(itemEl, src, mediaType, escapeAttr) {
+  function setPortfolioItemPreview(itemEl, srcOrItem, mediaType, escapeAttr) {
     const wrap = itemEl.querySelector("[data-portfolio-preview]");
     if (!wrap) return;
-    wrap.innerHTML = portfolioPreviewInnerHtml(src, mediaType, escapeAttr);
+    let item;
+    if (srcOrItem && typeof srcOrItem === "object") {
+      item = srcOrItem;
+    } else {
+      const mediaUrlEl = itemEl.querySelector('[data-field="mediaUrl"]');
+      item = {
+        mediaSrc: srcOrItem || "",
+        mediaUrl: mediaUrlEl ? mediaUrlEl.value.trim() : "",
+        mediaType: mediaType || "image",
+      };
+    }
+    wrap.innerHTML = portfolioPreviewInnerHtml(item, escapeAttr);
+  }
+
+  function refreshPortfolioPreviewFromItem(itemEl, escapeAttr) {
+    const item = {
+      mediaSrc: itemEl.querySelector('[data-field="mediaSrc"]').value.trim(),
+      mediaUrl: itemEl.querySelector('[data-field="mediaUrl"]').value.trim(),
+      mediaType: itemEl.querySelector('[data-field="mediaType"]').value || "image",
+    };
+    if (item.mediaUrl && isVideoUrl(item.mediaUrl)) {
+      item.mediaType = "video";
+      itemEl.querySelector('[data-field="mediaType"]').value = "video";
+    }
+    setPortfolioItemPreview(itemEl, item, item.mediaType, escapeAttr);
   }
 
   function bindSectionsEditor(editor, addBtn, kindSelect, helpers) {
@@ -884,8 +945,17 @@
         const item = portfolioClearBtn.closest(".repeat-item");
         if (!item) return;
         item.querySelector('[data-field="mediaSrc"]').value = "";
+        item.querySelector('[data-field="mediaUrl"]').value = "";
         item.querySelector('[data-field="mediaType"]').value = "image";
         setPortfolioItemPreview(item, "", "image", helpers.escapeAttr);
+        return;
+      }
+    });
+
+    editor.addEventListener("input", function (ev) {
+      if (ev.target.matches('[data-field="mediaUrl"]')) {
+        const item = ev.target.closest(".repeat-item");
+        if (item) refreshPortfolioPreviewFromItem(item, helpers.escapeAttr);
       }
     });
 
@@ -935,8 +1005,11 @@
             setPortfolioItemPreview(item, result.dataUrl, result.mediaType, helpers.escapeAttr);
             helpers.showToast("媒体已就绪，记得保存");
           })
-          .catch(function () {
-            helpers.showToast("处理失败：请使用 JPG/PNG/GIF/WebP/SVG 或 MP4/WebM/MOV");
+          .catch(function (err) {
+            helpers.showToast(
+              (err && err.message) ||
+                "处理失败：请使用 JPG/PNG/GIF/WebP/SVG 或 MP4/WebM/MOV，大视频请用外链"
+            );
           });
       }
     });
