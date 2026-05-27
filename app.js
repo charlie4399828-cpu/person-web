@@ -20,6 +20,45 @@
     return "person_web_edit_pwd_" + currentSlug;
   }
 
+  function authPasswordKeyFor(slug) {
+    return "person_web_edit_pwd_" + slug;
+  }
+
+  function getStoredPassword(slug) {
+    const key = authPasswordKeyFor(slug || currentSlug);
+    return sessionStorage.getItem(key) || localStorage.getItem(key) || "";
+  }
+
+  function storeCardPassword(slug, password) {
+    if (!slug || !password) return;
+    const key = authPasswordKeyFor(slug);
+    sessionStorage.setItem(key, password);
+    try {
+      localStorage.setItem(key, password);
+    } catch (e) {
+      console.warn("保存编辑密码到本地失败", e);
+    }
+  }
+
+  const DEVICE_ID_KEY = "person_web_device_id";
+
+  function getDeviceId() {
+    try {
+      let id = localStorage.getItem(DEVICE_ID_KEY);
+      if (!id) {
+        id = "d_" + Date.now().toString(36) + "_" + Math.random().toString(36).slice(2, 10);
+        localStorage.setItem(DEVICE_ID_KEY, id);
+      }
+      return id;
+    } catch (e) {
+      return "d_anonymous";
+    }
+  }
+
+  function isTouchDevice() {
+    return window.matchMedia("(hover: none) and (pointer: coarse)").matches;
+  }
+
   function getCardSlugFromUrl() {
     const p = new URLSearchParams(window.location.search);
     const raw = (p.get("card") || DEFAULT_SLUG).trim().toLowerCase();
@@ -200,7 +239,7 @@
 
   async function loadData(slug) {
     currentSlug = slug || getCardSlugFromUrl();
-    sessionEditPassword = sessionStorage.getItem(authPasswordKey()) || "";
+    sessionEditPassword = getStoredPassword(currentSlug);
     const remote = await fetchRemoteCardData(currentSlug);
     const local = readLocalCardData();
     const picked = pickNewerData(remote, local);
@@ -255,12 +294,15 @@
 
   function getEditPasswordForSync() {
     if (sessionEditPassword) return sessionEditPassword;
-    return LEGACY_EDIT_PASSWORD;
+    const stored = getStoredPassword(currentSlug);
+    if (stored) return stored;
+    if (currentSlug === DEFAULT_SLUG) return LEGACY_EDIT_PASSWORD;
+    return "";
   }
 
   async function verifyEditPassword(password) {
     if (needsCloudCreate(currentSlug)) {
-      const stored = sessionStorage.getItem(authPasswordKey()) || sessionEditPassword;
+      const stored = getStoredPassword(currentSlug);
       return password === stored;
     }
     if (currentSlug === DEFAULT_SLUG && password === LEGACY_EDIT_PASSWORD) {
@@ -272,6 +314,19 @@
       password: password,
     });
     return result.ok && result.body && result.body.ok;
+  }
+
+  async function recordCardView() {
+    if (currentSlug === DEFAULT_SLUG || needsCloudCreate(currentSlug)) return;
+    try {
+      await callCardApi({
+        action: "view",
+        slug: currentSlug,
+        deviceId: getDeviceId(),
+      });
+    } catch (e) {
+      console.warn("记录访问失败", e);
+    }
   }
 
   async function syncToCloud() {
@@ -732,7 +787,7 @@
     sessionStorage.setItem(authSessionKey(), "1");
     if (password) {
       sessionEditPassword = password;
-      sessionStorage.setItem(authPasswordKey(), password);
+      storeCardPassword(currentSlug, password);
     }
   }
 
@@ -789,26 +844,36 @@
     const hint = document.getElementById("editEntryHint");
 
     if (title) {
-      title.addEventListener("dblclick", requestEditAccess);
+      title.style.cursor = "pointer";
+      title.setAttribute("title", isTouchDevice() ? "点击编辑名片" : "双击编辑名片");
 
-      let pressTimer = null;
-      function clearPressTimer() {
-        if (pressTimer) {
-          clearTimeout(pressTimer);
-          pressTimer = null;
-        }
-      }
-
-      title.addEventListener("touchstart", function () {
-        clearPressTimer();
-        pressTimer = setTimeout(function () {
-          pressTimer = null;
+      if (isTouchDevice()) {
+        title.addEventListener("click", function (ev) {
+          ev.preventDefault();
           requestEditAccess();
-        }, 650);
-      });
-      title.addEventListener("touchend", clearPressTimer);
-      title.addEventListener("touchmove", clearPressTimer);
-      title.addEventListener("touchcancel", clearPressTimer);
+        });
+      } else {
+        title.addEventListener("dblclick", requestEditAccess);
+
+        let pressTimer = null;
+        function clearPressTimer() {
+          if (pressTimer) {
+            clearTimeout(pressTimer);
+            pressTimer = null;
+          }
+        }
+
+        title.addEventListener("touchstart", function () {
+          clearPressTimer();
+          pressTimer = setTimeout(function () {
+            pressTimer = null;
+            requestEditAccess();
+          }, 500);
+        }, { passive: true });
+        title.addEventListener("touchend", clearPressTimer);
+        title.addEventListener("touchmove", clearPressTimer);
+        title.addEventListener("touchcancel", clearPressTimer);
+      }
     }
 
     if (hint) {
@@ -1193,7 +1258,7 @@
       const blank = buildBlankCardData();
       markPendingCloudCreate(slug);
       localStorage.setItem("person_web_card_" + slug, JSON.stringify(blank));
-      sessionStorage.setItem("person_web_edit_pwd_" + slug, pwd);
+      storeCardPassword(slug, pwd);
       sessionStorage.setItem("person_web_edit_authed_" + slug, "1");
 
       const cardUrl = buildCardUrl(slug);
@@ -1231,7 +1296,8 @@
 
   function goToPendingCard(editAfter) {
     if (!pendingSuccessSlug) return;
-    sessionStorage.setItem("person_web_edit_pwd_" + pendingSuccessSlug, sessionStorage.getItem("person_web_edit_pwd_" + pendingSuccessSlug) || "");
+    const pwd = getStoredPassword(pendingSuccessSlug);
+    if (pwd) storeCardPassword(pendingSuccessSlug, pwd);
     sessionStorage.setItem("person_web_edit_authed_" + pendingSuccessSlug, "1");
     if (editAfter) {
       sessionStorage.setItem("person_web_open_edit_" + pendingSuccessSlug, "1");
@@ -1323,9 +1389,11 @@
           escapeHtml(getAdminPageUrl()) +
           "）";
       } else if (needsCloudCreate(currentSlug)) {
-        hint.textContent = "名片尚未保存到云端。编辑完成后请点击「保存修改」，并务必保存专属链接。";
+        hint.textContent = "名片尚未保存到云端。点击顶部「个人名片」或连点此处 3 次可编辑，完成后请保存。";
       } else {
-        hint.textContent = "双击标题或连点下方 3 次可编辑。请妥善保管你的编辑密码与专属链接。";
+        hint.textContent = isTouchDevice()
+          ? "点击顶部「个人名片」或连点此处 3 次可编辑。请妥善保管编辑密码与专属链接。"
+          : "双击顶部「个人名片」或连点此处 3 次可编辑。请妥善保管编辑密码与专属链接。";
       }
     }
   }
@@ -1445,10 +1513,15 @@
     renderSiteQrs();
     updateCreateCardUi();
     document.getElementById("saveBtn").addEventListener("click", saveAsImage);
+    recordCardView();
 
     const openEditKey = "person_web_open_edit_" + currentSlug;
     if (sessionStorage.getItem(openEditKey) === "1") {
       sessionStorage.removeItem(openEditKey);
+      if (getStoredPassword(currentSlug)) {
+        sessionEditPassword = getStoredPassword(currentSlug);
+        sessionStorage.setItem(authSessionKey(), "1");
+      }
       openEditModal();
       showToast("名片已创建，请开始编辑你的内容");
     }

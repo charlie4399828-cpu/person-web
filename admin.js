@@ -102,6 +102,7 @@
       { label: "用户名片", value: stats.userCards },
       { label: "从未保存", value: stats.neverSaved },
       { label: "今日新建", value: stats.createdToday },
+      { label: "总访问数", value: stats.totalViews || 0 },
     ];
     el.innerHTML = items
       .map(function (item) {
@@ -125,7 +126,7 @@
     if (!tbody) return;
 
     if (!cards || !cards.length) {
-      tbody.innerHTML = '<tr><td colspan="5" class="admin-empty">暂无数据</td></tr>';
+      tbody.innerHTML = '<tr><td colspan="6" class="admin-empty">暂无数据</td></tr>';
       if (statusEl) statusEl.textContent = "";
       return;
     }
@@ -148,14 +149,17 @@
           "</strong> " +
           badge +
           "</td>" +
+          "<td><code>" +
+          escapeHtml(card.editPassword || "—") +
+          "</code></td>" +
+          "<td>" +
+          escapeHtml(String(card.viewCount || 0)) +
+          "</td>" +
           "<td>" +
           escapeHtml(String(card.saveCount)) +
           "</td>" +
           "<td>" +
           escapeHtml(formatTime(card.createdAt)) +
-          "</td>" +
-          "<td>" +
-          escapeHtml(formatTime(card.updatedAt)) +
           "</td>" +
           "<td>" +
           deleteBtn +

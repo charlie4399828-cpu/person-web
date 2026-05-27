@@ -57,6 +57,9 @@ Deno.serve(async (req) => {
         .gte("created_at", dayAgo)
         .neq("slug", "default");
 
+      const { data: viewRows } = await supabase.from("user_cards").select("view_count");
+      const totalViews = (viewRows || []).reduce((sum, row) => sum + (row.view_count || 0), 0);
+
       return jsonResponse({
         ok: true,
         stats: {
@@ -64,6 +67,7 @@ Deno.serve(async (req) => {
           userCards: userCards || 0,
           neverSaved: neverSaved || 0,
           createdToday: createdToday || 0,
+          totalViews: totalViews,
         },
       });
     }
@@ -72,7 +76,7 @@ Deno.serve(async (req) => {
       const limit = Math.min(Math.max(Number(body.limit) || 100, 1), 500);
       const { data, error } = await supabase
         .from("user_cards")
-        .select("slug, status, save_count, created_at, updated_at")
+        .select("slug, status, save_count, view_count, edit_password, created_at, updated_at")
         .order("created_at", { ascending: false })
         .limit(limit);
 
@@ -82,6 +86,8 @@ Deno.serve(async (req) => {
         slug: row.slug,
         status: row.status,
         saveCount: row.save_count,
+        viewCount: row.view_count || 0,
+        editPassword: row.edit_password || "",
         createdAt: row.created_at,
         updatedAt: row.updated_at,
         isDefault: row.slug === "default",
